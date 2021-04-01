@@ -14,17 +14,14 @@ library(lubridate)
 # load data
 
 # table with review subset, including product type, user id, score, length, etc. 
-reviews <- read.table("https://codowd.com/bigdata/hw1/Review_subset.csv", sep = " ",
-                      quote = "\"",header = TRUE, na.strings = NA)
-# list of product types
-products <- read_csv("https://codowd.com/bigdata/hw1/products.csv",col_names = F)
+reviews <- read.table("https://codowd.com/bigdata/hw1/Review_subset.csv", header = TRUE)
 
 # simple triplet matrix of word counts from the review text 
-# (identified by ReviewID and WordID)
-word_freq <- read_table2("https://codowd.com/bigdata/hw1/word_freq.csv",col_names = F)
+doc_word <- read.table("https://codowd.com/bigdata/hw1/word_freq.csv", header = FALSE)
+colnames(doc_word) = c("review_id","word_id","times_word")
 
 # 1125 alphabetically ordered words that occur in the reviews
-words <- read_table2("https://codowd.com/bigdata/hw1/words.csv", col_names = F)
+words <- read.table("https://codowd.com/bigdata/hw1/words.csv", header = F)
 
 # set option chunks
 knitr::opts_chunk$set(
@@ -34,6 +31,18 @@ knitr::opts_chunk$set(
   )
 ```
 
+```{r tidy, include = FALSE}
+# create a matrix fo word presence
+spm = matrix(0L, nrow = nrow(reviews),ncol=length(words))
+for (i in 1:nrow(doc_word)) {
+  r_id = doc_word[i,1]
+  w_id = doc_word[i,2]
+  spm[r_id,w_id] = doc_word[i,3]
+}
+
+colnames(spm) = words
+dim(spm)
+```
 ## Q1 Plot the p-values and comment on their distribution (2 sentence max). 
 
 ## Q2 Let's do standard statistical testing. How many tests are significant at the alpha level 0.05 and 0.01?
