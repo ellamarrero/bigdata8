@@ -17,11 +17,12 @@ library(lubridate)
 reviews <- read.table("https://codowd.com/bigdata/hw1/Review_subset.csv", header = TRUE)
 
 # simple triplet matrix of word counts from the review text 
-doc_word <- read_table2("https://codowd.com/bigdata/hw1/word_freq.csv")
+doc_word <- read_table2("https://codowd.com/bigdata/hw1/word_freq.csv", col_names = FALSE)
 colnames(doc_word) = c("review_id","word_id","times_word")
 
 # 1125 alphabetically ordered words that occur in the reviews
 words <- read.table("https://codowd.com/bigdata/hw1/words.csv", header = F)
+words <- words[,1]
 
 # set option chunks
 knitr::opts_chunk$set(
@@ -34,7 +35,7 @@ knitr::opts_chunk$set(
 ```{r tidy, include = FALSE}
 # create a matrix fo word presence
 spm = matrix(0L, nrow = nrow(reviews),ncol=length(words))
-for (i in 1:nrow(doc_word)) {
+for (i in 1:nrow(doc_word)) { 
   r_id = doc_word[i,1]
   w_id = doc_word[i,2]
   # spm[review id, word, id] = times word 
