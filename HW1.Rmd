@@ -45,6 +45,20 @@ for (i in 1:nrow(doc_word)) {
 colnames(spm) = words
 dim(spm)
 ```
+
+```{r}
+spm <- matrix(0L, nrow = nrow(reviews),ncol=length(words))
+get_revid <- function(index){
+  r_id <- doc_word[index,1]
+  w_id <- doc_word[index,2]
+  # spm[review id, word, id] = times word 
+  spm[r_id, w_id] <- doc_word[index,3]
+  print(spm[r_id, w_id])
+  
+}
+fill_spm <- sapply(1:nrow(doc_word), get_revid)
+```
+
 ## Q1 Plot the p-values and comment on their distribution (2 sentence max). 
 
 ## Q2 Let's do standard statistical testing. How many tests are significant at the alpha level 0.05 and 0.01?
