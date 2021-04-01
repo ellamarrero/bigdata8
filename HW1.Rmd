@@ -17,7 +17,7 @@ library(lubridate)
 reviews <- read.table("https://codowd.com/bigdata/hw1/Review_subset.csv", header = TRUE)
 
 # simple triplet matrix of word counts from the review text 
-doc_word <- read.table("https://codowd.com/bigdata/hw1/word_freq.csv")
+doc_word <- read_table2("https://codowd.com/bigdata/hw1/word_freq.csv")
 colnames(doc_word) = c("review_id","word_id","times_word")
 
 # 1125 alphabetically ordered words that occur in the reviews
