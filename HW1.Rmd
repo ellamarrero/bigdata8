@@ -17,7 +17,7 @@ library(lubridate)
 reviews <- read.table("https://codowd.com/bigdata/hw1/Review_subset.csv", header = TRUE)
 
 # simple triplet matrix of word counts from the review text 
-doc_word <- read.table("https://codowd.com/bigdata/hw1/word_freq.csv", header = FALSE)
+doc_word <- read.table("https://codowd.com/bigdata/hw1/word_freq.csv")
 colnames(doc_word) = c("review_id","word_id","times_word")
 
 # 1125 alphabetically ordered words that occur in the reviews
@@ -37,7 +37,8 @@ spm = matrix(0L, nrow = nrow(reviews),ncol=length(words))
 for (i in 1:nrow(doc_word)) {
   r_id = doc_word[i,1]
   w_id = doc_word[i,2]
-  spm[r_id,w_id] = doc_word[i,3]
+  # spm[review id, word, id] = times word 
+  spm[r_id, w_id] = doc_word[i,3]
 }
 
 colnames(spm) = words
