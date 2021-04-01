@@ -14,18 +14,17 @@ library(lubridate)
 # load data
 
 # table with review subset, including product type, user id, score, length, etc. 
-reviews <- read.table("https://codowd.com/bigdata/hw1/Review_subset.csv",
-                      sep = " ", header = F, stringsAsFactors = F)
+reviews <- read.table("https://codowd.com/bigdata/hw1/Review_subset.csv", sep = " ",
+                      quote = "\"",header = TRUE, na.strings = NA)
 # list of product types
-products <- read.table("https://codowd.com/bigdata/hw1/products.csv",
-                       sep = " ", header = F, stringsAsFactors = F)
+products <- read_csv("https://codowd.com/bigdata/hw1/products.csv",col_names = F)
+
 # simple triplet matrix of word counts from the review text 
 # (identified by ReviewID and WordID)
-word_freq <- read.table("https://codowd.com/bigdata/hw1/word_freq.csv",
-                        sep = " ", header = F, stringsAsFactors = F)
+word_freq <- read_table2("https://codowd.com/bigdata/hw1/word_freq.csv",col_names = F)
+
 # 1125 alphabetically ordered words that occur in the reviews
-words <- read.table("https://codowd.com/bigdata/hw1/words.csv",
-                    sep = " ", header = F, stringsAsFactors = F)
+words <- read_table2("https://codowd.com/bigdata/hw1/words.csv", col_names = F)
 
 # set option chunks
 knitr::opts_chunk$set(
@@ -34,4 +33,17 @@ knitr::opts_chunk$set(
   warning = FALSE
   )
 ```
+
+## Q1 Plot the p-values and comment on their distribution (2 sentence max). 
+
+## Q2 Let's do standard statistical testing. How many tests are significant at the alpha level 0.05 and 0.01?
+
+## Q3 What is the p-value cutoff for 1% FDR? Plot the rejection region. 
+
+## Q4 How many discoveries do you find at q=0.01 and how many do you expect to be false? 
+
+## Q5 What are the 10 most significant words? Was 'addictive' significant'? Do these results make sense to you? (2 sentence max) 
+
+## Q6 What are the advantages and disadvantages of our FDR anaysis? (4 sentence max) 
+
 
