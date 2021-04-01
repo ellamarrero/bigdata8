@@ -36,27 +36,15 @@ knitr::opts_chunk$set(
 # create a matrix fo word presence
 spm <- matrix(0L, nrow = nrow(reviews),ncol=length(words))
 for (i in 1:nrow(doc_word)) { 
-  r_id <- doc_word[i,1]
-  w_id <- doc_word[i,2]
-  # spm[review id, word, id] = times word 
-  spm[r_id, w_id] <- doc_word[i,3]
+  r_id <- doc_word[i,1] # get review ID number
+  w_id <- doc_word[i,2] # get word ID number
+  # set col name as word ID, row num as review ID
+  # assign word freq in review that row/col
+  spm[r_id, w_id] <- doc_word[i,3] 
 }
 
-colnames(spm) = words
+colnames(spm) = words 
 dim(spm)
-```
-
-```{r}
-spm <- matrix(0L, nrow = nrow(reviews),ncol=length(words))
-get_revid <- function(index){
-  r_id <- doc_word[index,1]
-  w_id <- doc_word[index,2]
-  # spm[review id, word, id] = times word 
-  spm[r_id, w_id] <- doc_word[index,3]
-  print(spm[r_id, w_id])
-  
-}
-fill_spm <- sapply(1:nrow(doc_word), get_revid)
 ```
 
 ## Q1 Plot the p-values and comment on their distribution (2 sentence max). 
