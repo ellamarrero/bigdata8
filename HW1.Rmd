@@ -34,12 +34,12 @@ knitr::opts_chunk$set(
 
 ```{r tidy, include = FALSE}
 # create a matrix fo word presence
-spm = matrix(0L, nrow = nrow(reviews),ncol=length(words))
+spm <- matrix(0L, nrow = nrow(reviews),ncol=length(words))
 for (i in 1:nrow(doc_word)) { 
-  r_id = as.numeric(doc_word[i,1])
-  w_id = as.numeric(doc_word[i,2])
+  r_id <- doc_word[i,1]
+  w_id <- doc_word[i,2]
   # spm[review id, word, id] = times word 
-  spm[r_id, w_id] = doc_word[i,3]
+  spm[r_id, w_id] <- doc_word[i,3]
 }
 
 colnames(spm) = words
