@@ -1,5 +1,5 @@
 ---
-title: "Hi Ella"
+title: "Homework 1"
 author: "Ella Marrero, David Morales, Brandon Powell"
 date: `r lubridate::today()`
 output: html_document
