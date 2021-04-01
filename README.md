@@ -1,7 +1,6 @@
 # Homeworks for Big Data (BUSN 20800)
 
 This respository will contain files for the homework assignments to be worked upon by Brandon Powell, Ella Marrero, and David Morales. 
-Big Data for Group 8 (can make more sub-repositories for hw's if need be)
 
 # Files 
 
