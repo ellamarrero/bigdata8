@@ -1,0 +1,37 @@
+---
+title: "Homework 1"
+author: "Ella Marrero, David Morales, Brandon Powell"
+date: `r lubridate::today()`
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# load necessary libraries
+library(tidyverse)
+library(tidymodels)
+library(lubridate)
+
+# load data
+
+# table with review subset, including product type, user id, score, length, etc. 
+reviews <- read.table("https://codowd.com/bigdata/hw1/Review_subset.csv",
+                      sep = " ", header = F, stringsAsFactors = F)
+# list of product types
+products <- read.table("https://codowd.com/bigdata/hw1/products.csv",
+                       sep = " ", header = F, stringsAsFactors = F)
+# simple triplet matrix of word counts from the review text 
+# (identified by ReviewID and WordID)
+word_freq <- read.table("https://codowd.com/bigdata/hw1/word_freq.csv",
+                        sep = " ", header = F, stringsAsFactors = F)
+# 1125 alphabetically ordered words that occur in the reviews
+words <- read.table("https://codowd.com/bigdata/hw1/words.csv",
+                    sep = " ", header = F, stringsAsFactors = F)
+
+# set option chunks
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE
+  )
+```
+
