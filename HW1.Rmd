@@ -1,6 +1,6 @@
 ---
 title: "Homework 1"
-author: "Ella Marrero, David Morales, Brandon Powell"
+author: "Ella Marrero, David Morales, Brandon Powell, Joon Chae"
 date: `r lubridate::today()`
 output: html_document
 ---
