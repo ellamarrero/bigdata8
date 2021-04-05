@@ -148,14 +148,23 @@ At q = 0.01, we find `r length(pk[pk<p_cutoff])` discoveries and expect `r p_cut
 
 ## Q5 What are the 10 most significant words? Was 'addictive' significant'? Do these results make sense to you? (2 sentence max) 
 
-```{r}
+```{r word significance}
 for (i in 1:10){
   rank = i
   print(paste(rank, words[pvals == pk[i]]))
 }
+ad_sig <- pvals[words == 'addictive'] < p_cutoff
+sig_text = c('is not', 'is')
+print(paste("Addictive", sig_text[ad_sig + 1], 'significant.'))
 ```
 
 
 ## Q6 What are the advantages and disadvantages of our FDR anaysis? (4 sentence max) 
 
+\~reasons\~
 
+<ul>
+<li>Doesn't account for confounding factors </li>
+<li>Seems sus</li>
+<li>Idk maybe we need like a sentiment analysis or something for good and bad words</li>
+</ul>
