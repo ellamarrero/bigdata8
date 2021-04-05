@@ -1,0 +1,161 @@
+```{r}
+library(lubridate)
+```
+---
+title: "Homework 1"
+author: "Ella Marrero, David Morales, Brandon Powell, Joon Chae"
+date: `r lubridate::today()`
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+# load necessary libraries
+library(tidyverse)
+library(tidymodels)
+```
+
+```{r read}
+# load data
+
+# table with review subset, including product type, user id, score, length, etc. 
+reviews <- read.table("https://codowd.com/bigdata/hw1/Review_subset.csv", header = TRUE)
+
+# simple triplet matrix of word counts from the review text 
+doc_word <- read.table("https://codowd.com/bigdata/hw1/word_freq.csv", header = FALSE)
+colnames(doc_word) = c("review_id","word_id","times_word")
+
+# 1125 alphabetically ordered words that occur in the reviews
+words <- read.table("https://codowd.com/bigdata/hw1/words.csv", header = F)
+words <- words[,1]
+
+# set option chunks
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE
+  )
+```
+
+```{r tidy, include = FALSE}
+# create a matrix fo word presence
+spm <- matrix(0L, nrow = nrow(reviews),ncol=length(words))
+for (i in 1:nrow(doc_word)) { 
+  r_id <- doc_word[i,1] # get review ID number
+  w_id <- doc_word[i,2] # get word ID number
+  # set col name as word ID, row num as review ID
+  # assign word freq in review that row/col
+  spm[r_id, w_id] <- doc_word[i,3] 
+}
+
+colnames(spm) = words 
+dim(spm)
+```
+
+## Simplify from Counts to presence
+Create a dense dataframe of word presence -- also going to be big. And a Y variable for use later. 
+```{r}
+P = as.data.frame(as.matrix(spm>0)) 
+
+stars = reviews$Score
+```
+Now we will build a function that will run each of our marginal regressions. 
+```{r}
+margreg = function(p){
+	fit = lm(stars~P[[p]])
+	sf = summary(fit)
+	return(sf$coef[2,4]) 
+}
+margreg(10) #the pval for the 10th word
+```
+Coincidentally, word 10 looks pretty significant. What is it?
+```{r}
+words[10]
+```
+Okay, that explains that. 
+
+## Calculate Pvalues for every word
+There are ~1200 regressions to run here. Which could be time consuming. So we will look at a few ways to do the procedure.
+
+### Apply version
+We will use `sapply`, which returns a vector when it can. It goes through each element of its first argument, and runs the function `margreg` on that element. Just like the for loop above. 
+```{r, cache=T}
+pvals = sapply(1:length(words),margreg)
+```
+Not any faster really. But it is much clearer you aren't using the order of iterations. And it is much easier to parallelize if we want. And we don't need to initialize up front. 
+
+
+## Q1 Plot the p-values and comment on their distribution (2 sentence max). 
+
+```{r}
+ggplot()+
+  geom_histogram(aes(pvals, fill = ..count..), binwidth = 0.07)+
+  labs(title = 'Plot of p-values', subtitle = "who's to say though", x = 'p-value', y = 'Frequency', caption = "idk why but it appears to be completely impossible to reorder the p-values I've damn near lost my mind")+
+  coord_flip()+
+  theme_classic()
+```
+
+
+The distribution of p-values for these regressions is extremely right skewed with a very high concentration of small p-values; this suggests that an abundance of the words have a significant correlation to review rating. 
+
+## Q2 Let's do standard statistical testing. How many tests are significant at the alpha level 0.05 and 0.01?
+
+```{r}
+alphas = c(0.05, 0.01)
+for (alpha in alphas){
+  print(paste("Tests significant at alpha =", alpha, ":" , length(pvals[pvals < alpha])))
+}
+```
+
+
+## Q3 What is the p-value cutoff for 1% FDR? Plot the rejection region. 
+
+
+<center>
+Benjamini & Hochberg: $\quad \alpha^{*}= \max\{p_{k}:p_{k}\leq q \frac{k}{K}\}$  
+\[q = 0.01 \quad K = 1125\]
+
+\[\max \{p_{(k)} : \frac{1125 \times p_{(k)}}{k}\leq 0.01\}\]
+</center>
+
+```{r}
+K = 1125
+q = 0.01
+k = numeric(length(pvals))
+pk = sort(pvals)
+k = 1:length(pk)
+plot_w = 1:400
+ggplot() +
+  theme_classic()+
+  geom_point(aes(k[plot_w], pk[plot_w]), size = 0.01)+
+  
+  geom_line(aes(k[plot_w], ((q/K)*k)[plot_w], color = 'FDR = 0.01'))+
+  geom_area(aes(k[plot_w], ((q/K)*k)[plot_w], fill = 'rejection area'), alpha = 0.2)+
+  labs(x = 'Discoveries under p-value (k)', y = 'p-value')+
+  theme(legend.title = element_blank()) +
+  scale_color_manual(values = c('blue'), labels = c('FDR = 0.01'))
+```
+
+```{r, find alpha}
+p_cutoff = pk[length(pk[(1125 * pk)/k <= 0.01])]
+print(paste('P-value cutoff for 1% FDR:', p_cutoff))
+```
+
+
+## Q4 How many discoveries do you find at q=0.01 and how many do you expect to be false? 
+
+At q = 0.01, we find `r length(pk[pk<p_cutoff])` discoveries and expect `r p_cutoff*K` to be false.
+
+## Q5 What are the 10 most significant words? Was 'addictive' significant'? Do these results make sense to you? (2 sentence max) 
+
+```{r}
+for (i in 1:10){
+  rank = i
+  print(paste(rank, words[pvals == pk[i]]))
+}
+```
+
+
+## Q6 What are the advantages and disadvantages of our FDR anaysis? (4 sentence max) 
+
+
