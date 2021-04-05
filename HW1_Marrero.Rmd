@@ -1,0 +1,183 @@
+---
+title: "Homework 1"
+author: "Ella Marrero"
+date: "4/5/2021"
+output: 
+  html_document:
+    toc: true 
+    toc_float: true
+    theme: united
+    highlight: espresso
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(parallel)
+library(kableExtra)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE) 
+```
+
+# Setup
+First, we will load the data
+```{r}
+data = read.table("https://codowd.com/bigdata/hw1/Review_subset.csv",header=TRUE) # reviews
+words = read.table("https://codowd.com/bigdata/hw1/words.csv") # words
+words = words[,1]
+doc_word = read.table("https://codowd.com/bigdata/hw1/word_freq.csv") 
+# word frequency (text-word pairing)
+colnames(doc_word) = c("Review ID","Word ID","Times Word")
+```
+
+# Marginal Regression Screening
+Then, we will create a  matrix 
+```{r, cache=T}
+# Create a matrix of word presence
+spm = matrix(0L,nrow = nrow(data),ncol=length(words))
+for (index in 1:nrow(doc_word)) {
+  i = doc_word[index,1]
+  j = doc_word[index,2]
+  spm[i,j] = doc_word[index,3]
+}
+colnames(spm) = words
+```
+
+## Simplify from Counts to presence
+Create a dense dataframe of word presence -- also going to be big. And a Y variable for use later. 
+```{r}
+# define vars
+P = as.data.frame(as.matrix(spm>0)) 
+stars = data$Score
+
+# runs marginal regressions 
+margreg = function(p){
+	fit = lm(stars ~ P[[p]])
+	sf = summary(fit)
+	return(sf$coef[2,4]) # return p-value of coef
+}
+```
+
+## Calculate Pvalues for every word
+```{r bigboi, eval=T}
+ncores = detectCores()-1 # remove 1 core
+# Make a cluster
+cl = makeCluster(ncores) 
+# Export data to the cluster
+clusterExport(cl,c("stars","P")) 
+# Run the regressions in parallel
+pvals = parSapply(cl,1:length(words),margreg)
+# Turn off cluster
+stopCluster(cl)
+```
+
+### Tidy data
+```{r}
+# final product: vector of pvals, each of named by corresponding word
+rm(data,doc_word,spm,P)
+names(pvals) = words
+```
+
+```{r, include = FALSE}
+# tidy into tibble for tidyverse reasons (if wanted)
+# gave me weird numbers -- didn't really work
+# pvals_tidy <- bind_rows(pvals)
+# pvals_long <- t(pvals_tidy)
+# pvals_long <- cbind(rownames(pvals_long), pvals_long)
+# rownames(pvals_long) <- 1:nrow(pvals_long)
+# colnames(pvals_long) <- c("word", "p_value")
+# pvals_long2 <- as_tibble(pvals_long)
+```
+
+# Homework Questions:
+
+## Q1
+First, we will plot the p-values.
+
+```{r}
+hist(pvals, breaks=100,main='',xlab='p-values',
+     col="lightblue") 
+```
+
+The distribution is extremely right skewed, with a slight bimodal distribution (peaks at 0.01 and 0.1/0.2).
+
+## Q2
+From the p-value matrix we calculated, we can count the number of tests that are significant at the $\alpha=0.05$ and $0.01$?
+
+```{r}
+less_01 <- sum(pvals <= 0.01)
+less_05 <- sum(pvals <= 0.05)
+```
+
+```{r, echo= FALSE}
+signif <- c("p < 0.01", "p < 0.05")
+pval_count <- c(less_01, less_05)
+tibble(signif, pval_count) %>%
+  rename("Significance Level" = signif,
+         "Number of Tests" = pval_count)%>%
+  kable() %>%
+  kable_styling(bootstrap_options = 'hover')
+```
+
+## Q3
+Now, we will calculate the p-value cutoff for the 1% (q = 1) False Discovery Rate (FDR), and plot the rejection region.
+
+```{r}
+fdr_cut_c <- function(pvals, q){
+  pvals = pvals[!is.na(pvals)]
+  K = length(pvals)
+  k = rank(pvals, ties.method="min")
+  alpha = max(pvals[ pvals<= (q*k/K) ])
+  alpha
+}
+
+cutoff01 <- fdr_cut_c(pvals, 0.01)
+```
+
+```{r}
+sig = factor(pvals<=cutoff01)
+levels(sig) = c("lightgrey","maroon")
+
+o = order(pvals)
+K = length(pvals)
+
+plot(pvals[o], col=sig[o], pch=20, 
+     ylab="p-values", xlab="tests ordered by p-value", 
+     main = 'FDR = 0.1%',log="xy")
+```
+
+## Q4
+```{r}
+num_disc <- sum(pvals<=cutoff01)
+p_k <- 0.01*length(pvals)
+```
+
+We find `r num_disc` discoveries at q = 0.01. We expect `r p_k` to be false (= $P_{(k)}K$)
+
+## Q5
+
+What are the 10 most significant words?  Was 'addictive' significant'? Do these results make sense to you? (2 sentence max)  
+
+```{r}
+o = order(pvals)
+top10 <- pvals[o][1:10]
+top10 <- cbind(rownames(top10), top10)
+top10 <- cbind(word = rownames(top10), top10)
+rownames(top10) <- 1:nrow(top10)
+```
+
+The 10 most significant words are:
+```{r, echo = FALSE}
+kable(top10, col.names = c("Word", "Significance Level"))%>%
+  kable_styling(bootstrap_options = 'hover')
+```
+
+Addictive was not signficant. Thes results do make sense to us, as ...
+
+
+## Q6
+What are the advantages and disadvantages of our FDR ana;ysis? (4 sentence max)  
+
+FILL IN WITH GROUP
+
