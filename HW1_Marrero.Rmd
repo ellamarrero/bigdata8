@@ -177,7 +177,17 @@ Addictive was not signficant. Thes results do make sense to us, as ...
 
 
 ## Q6
-What are the advantages and disadvantages of our FDR ana;ysis? (4 sentence max)  
+What are the advantages and disadvantages of our FDR analysis? (4 sentence max)  
 
-FILL IN WITH GROUP
+Advantages
+* Can be more confident that the words we're looking at 
+* Doesn't collapse as n increases, unlike Bonferonni correction
+
+Disadvantages
+* Controls for a low proportion of false positives instead of guarding against false positives
+  * Increased statistical power/fewer type 1
+* N-gram/text processing -- having 2 or more words grouped together changes their meaning
+* Words don't exist in isolation -- in a sentence, words influence each other and certain reviewers may have written a larger proportion of reviews who may use extreme words, i.e. predicting individual reviewers' ratings, not ratings generally
+* Self-selection of negative reviewrs
+
 
