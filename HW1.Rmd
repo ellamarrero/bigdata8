@@ -1,62 +1,224 @@
 ---
 title: "Homework 1"
 author: "Ella Marrero, David Morales, Brandon Powell, Joon Chae"
-date: `r lubridate::today()`
-output: html_document
+date: "4/6/2021"
+output: 
+  html_document:
+    toc: true 
+    toc_float: true
+    theme: united
+    highlight: haddock
 ---
 
 ```{r setup, include=FALSE}
-# load necessary libraries
 library(tidyverse)
-library(tidymodels)
-library(lubridate)
-
-# load data
-
-# table with review subset, including product type, user id, score, length, etc. 
-reviews <- read.table("https://codowd.com/bigdata/hw1/Review_subset.csv", header = TRUE)
-
-# simple triplet matrix of word counts from the review text 
-doc_word <- read.table("https://codowd.com/bigdata/hw1/word_freq.csv", header = FALSE)
-colnames(doc_word) = c("review_id","word_id","times_word")
-
-# 1125 alphabetically ordered words that occur in the reviews
-words <- read.table("https://codowd.com/bigdata/hw1/words.csv", header = F)
-words <- words[,1]
-
-# set option chunks
+library(parallel)
+library(kableExtra)
 knitr::opts_chunk$set(
   echo = TRUE,
   message = FALSE,
-  warning = FALSE
-  )
+  warning = FALSE) 
 ```
 
-```{r tidy, include = FALSE}
-# create a matrix fo word presence
-spm <- matrix(0L, nrow = nrow(reviews),ncol=length(words))
-for (i in 1:nrow(doc_word)) { 
-  r_id <- doc_word[i,1] # get review ID number
-  w_id <- doc_word[i,2] # get word ID number
-  # set col name as word ID, row num as review ID
-  # assign word freq in review that row/col
-  spm[r_id, w_id] <- doc_word[i,3] 
+# Setup
+First, we will load the data
+```{r}
+data = read.table("https://codowd.com/bigdata/hw1/Review_subset.csv",header=TRUE) # reviews
+words = read.table("https://codowd.com/bigdata/hw1/words.csv") # words
+words = words[,1]
+doc_word = read.table("https://codowd.com/bigdata/hw1/word_freq.csv") 
+# word frequency (text-word pairing)
+colnames(doc_word) = c("Review ID","Word ID","Times Word")
+```
+
+# Marginal Regression Screening
+Then, we will create a  matrix 
+```{r, cache=T}
+# Create a matrix of word presence
+spm = matrix(0L,nrow = nrow(data),ncol=length(words))
+for (index in 1:nrow(doc_word)) {
+  i = doc_word[index,1]
+  j = doc_word[index,2]
+  spm[i,j] = doc_word[index,3]
+}
+colnames(spm) = words
+```
+
+## Simplify from Counts to presence
+Create a dense dataframe of word presence -- also going to be big. And a Y variable for use later. 
+```{r}
+# define vars
+P = as.data.frame(as.matrix(spm>0)) 
+stars = data$Score
+
+# runs marginal regressions 
+margreg = function(p){
+	fit = lm(stars ~ P[[p]])
+	sf = summary(fit)
+	return(sf$coef[2,4]) # return p-value of coef
+}
+```
+
+## Calculate Pvalues for every word
+```{r bigboi, eval=T}
+ncores = detectCores()-1 # remove 1 core
+# Make a cluster
+cl = makeCluster(ncores) 
+# Export data to the cluster
+clusterExport(cl,c("stars","P")) 
+# Run the regressions in parallel
+pvals = parSapply(cl,1:length(words),margreg)
+# Turn off cluster
+stopCluster(cl)
+```
+
+### Tidy data
+```{r}
+names(pvals) = words
+```
+
+```{r, include = FALSE}
+# tidy into tibble for tidyverse reasons (if wanted)
+# gave me weird numbers -- didn't really work
+# pvals_tidy <- bind_rows(pvals)
+# pvals_long <- t(pvals_tidy)
+# pvals_long <- cbind(rownames(pvals_long), pvals_long)
+# rownames(pvals_long) <- 1:nrow(pvals_long)
+# colnames(pvals_long) <- c("word", "p_value")
+# pvals_long2 <- as_tibble(pvals_long)
+```
+
+# Homework Questions:
+
+## Q1
+First, we will plot the p-values.
+
+```{r, pvalue hist}
+ggplot()+
+  geom_histogram(aes(pvals, fill = ..count..), binwidth = 0.05)+
+  labs(title = 'Histogram of p-values', x = 'p-value', y = 'Frequency')+
+  theme_classic()
+```
+
+The distribution is extremely right skewed, with a slight bimodal distribution (peaks at 0.01 and 0.1/0.2). The skewness suggests that an abundance of the word frequencies have a relatively strong correlation to review rating.
+
+## Q2
+From the p-value matrix we calculated, we can count the number of tests that are significant at the $\alpha=0.05$ and $0.01$?
+
+```{r}
+less_01 <- sum(pvals <= 0.01)
+less_05 <- sum(pvals <= 0.05)
+```
+
+```{r, echo= FALSE}
+signif <- c("p < 0.01", "p < 0.05")
+pval_count <- c(less_01, less_05)
+tibble(signif, pval_count) %>%
+  rename("Significance Level" = signif,
+         "Number of Tests" = pval_count)%>%
+  kable() %>%
+  kable_styling(bootstrap_options = 'hover')
+```
+
+## Q3
+Now, we will calculate the p-value cutoff for the 1% (q = 1) False Discovery Rate (FDR), and plot the rejection region.
+
+<center>
+Benjamini & Hochberg: $\quad \alpha^{*}= \max\{p_{k}:p_{k}\leq q \frac{k}{K}\}$  
+\[q = 0.01 \quad K = 1125\]
+
+\[\max \{p_{(k)} : \frac{1125 \times p_{(k)}}{k}\leq 0.01\}\]
+</center>
+
+```{r}
+fdr_cut_c <- function(pvals, q){
+  pvals = pvals[!is.na(pvals)]
+  K = length(pvals)
+  k = rank(pvals, ties.method="min")
+  alpha = max(pvals[ pvals<= (q*k/K) ])
+  alpha
 }
 
-colnames(spm) = words 
-dim(spm)
+cutoff01 <- fdr_cut_c(pvals, 0.01)
 ```
 
-## Q1 Plot the p-values and comment on their distribution (2 sentence max). 
+```{r}
+K = length(pvals)
+q = 0.01
+pk = sort(pvals)
+k = 1:length(pk)
+plot_w = 1:400
 
-## Q2 Let's do standard statistical testing. How many tests are significant at the alpha level 0.05 and 0.01?
 
-## Q3 What is the p-value cutoff for 1% FDR? Plot the rejection region. 
+ggplot() +
+  geom_point(aes(k[plot_w], pk[plot_w]), size = 0.1)+
+  
+  geom_line(aes(k[plot_w], ((q/K)*k)[plot_w], color = 'FDR = 0.01'))+
+  geom_area(aes(k[plot_w], ((q/K)*k)[plot_w], fill = 'rejection area'), alpha = 0.25)+
+  
+  labs(title = "FDR = 1%", 
+       subtitle = paste("Smallest", length(plot_w), "p-values"),
+       x = 'Discoveries under p-value (k)', y = 'p-value')+
+  theme_classic() +
+  theme(legend.title = element_blank(), legend.position = (c(0.2,0.7))) +
+  scale_color_manual(values = c('blue'), labels = c('FDR = 0.01'))+
+  scale_fill_manual(values = c('green'), labels = c('rejection area'))
+```
 
-## Q4 How many discoveries do you find at q=0.01 and how many do you expect to be false? 
+P-value cutoff for 1% FDR = `r cutoff01`
 
-## Q5 What are the 10 most significant words? Was 'addictive' significant'? Do these results make sense to you? (2 sentence max) 
+## Q4
+```{r}
+num_disc <- sum(pvals<=cutoff01)
+p_k <- K*cutoff01
+```
 
-## Q6 What are the advantages and disadvantages of our FDR anaysis? (4 sentence max) 
+We find `r num_disc` discoveries at q = 0.01. We expect `r p_k` to be false (= $P_{(k)}K$)
 
+## Q5
+
+What are the 10 most significant words?  Was 'addictive' significant'? Do these results make sense to you? (2 sentence max)  
+
+```{r}
+o = order(pvals)
+top10 <- pvals[o][1:10]
+top10 <- cbind(rownames(top10), top10)
+top10 <- cbind(word = rownames(top10), top10)
+rownames(top10) <- 1:nrow(top10)
+```
+
+The 10 most significant words are:
+```{r, echo = FALSE}
+kable(top10, col.names = c("Word", "Significance Level"))%>%
+  kable_styling(bootstrap_options = 'hover')
+```
+
+```{r}
+ad_sig <- pvals['addictive'] < cutoff01
+sig_text = c('is not', 'is')
+cat(paste("Addictive", sig_text[ad_sig + 1], 'significant.'))
+```
+These results do make sense to us, as most of these words seem to have a clear connection (intuitively) to review rating. However, more neutral words like 'but', 'same', and 'not' are not as obvious in their connection to review rating. 
+
+
+## Q6
+What are the advantages and disadvantages of our FDR analysis? (4 sentence max)  
+
+<b>Advantages</b>
+<ul>
+<li>Can be more confident that the words we're looking at don't have a false positive effect on review rating</li>
+<li>Doesn't collapse as n increases, unlike Bonferonni correction</li>
+  <ul>
+  <li>Controls for a low proportion of false positives instead of guarding against false positives</li>
+  <li>Increased statistical power/fewer type 1 errors</li>
+  </ul>
+</ul>
+***
+<b>Disadvantages</b>
+<ul>
+<li>Controls for a low proportion of false positives instead of guarding against false positives</li>
+<li>N-gram/text processing -- having 2 or more words grouped together changes their meaning</li>
+<li>Words don't exist in isolation -- in a sentence, words influence each other and certain reviewers may have written a larger proportion of reviews who may use extreme words, i.e. predicting individual reviewers' ratings, not ratings generally</li>
+<li>Self-selection of negative reviewers</li>
+</ul>
 
