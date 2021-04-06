@@ -21,7 +21,7 @@ knitr::opts_chunk$set(
 ```
 
 # Setup
-First, we will load the data
+First, we will load the data: 
 ```{r}
 data = read.table("https://codowd.com/bigdata/hw1/Review_subset.csv",header=TRUE) # reviews
 words = read.table("https://codowd.com/bigdata/hw1/words.csv") # words
@@ -31,8 +31,7 @@ doc_word = read.table("https://codowd.com/bigdata/hw1/word_freq.csv")
 colnames(doc_word) = c("Review ID","Word ID","Times Word")
 ```
 
-# Marginal Regression Screening
-Then, we will create a  matrix 
+Then, we will create a matrix (marginal regression screening)
 ```{r, cache=T}
 # Create a matrix of word presence
 spm = matrix(0L,nrow = nrow(data),ncol=length(words))
@@ -44,8 +43,8 @@ for (index in 1:nrow(doc_word)) {
 colnames(spm) = words
 ```
 
-## Simplify from Counts to presence
-Create a dense dataframe of word presence -- also going to be big. And a Y variable for use later. 
+Then, we will simplify our matrix from counts by creating a dense dataframe of word presence, as well as add a Y variable (stars, rating by reviewer) for use later. 
+
 ```{r}
 # define vars
 P = as.data.frame(as.matrix(spm>0)) 
@@ -59,7 +58,7 @@ margreg = function(p){
 }
 ```
 
-## Calculate Pvalues for every word
+With this density matrix, we can calculate p-values for every word (how significantly the word predicts star rating, with the above regression equation).  
 ```{r bigboi, eval=T}
 ncores = detectCores()-1 # remove 1 core
 # Make a cluster
@@ -70,22 +69,8 @@ clusterExport(cl,c("stars","P"))
 pvals = parSapply(cl,1:length(words),margreg)
 # Turn off cluster
 stopCluster(cl)
-```
-
-### Tidy data
-```{r}
-names(pvals) = words
-```
-
-```{r, include = FALSE}
-# tidy into tibble for tidyverse reasons (if wanted)
-# gave me weird numbers -- didn't really work
-# pvals_tidy <- bind_rows(pvals)
-# pvals_long <- t(pvals_tidy)
-# pvals_long <- cbind(rownames(pvals_long), pvals_long)
-# rownames(pvals_long) <- 1:nrow(pvals_long)
-# colnames(pvals_long) <- c("word", "p_value")
-# pvals_long2 <- as_tibble(pvals_long)
+# assign word names to each p-value column
+names(pvals) = words 
 ```
 
 # Homework Questions:
@@ -103,7 +88,7 @@ ggplot()+
 The distribution is extremely right skewed, with a slight bimodal distribution (peaks at 0.01 and 0.1/0.2). The skewness suggests that an abundance of the word frequencies have a relatively strong correlation to review rating.
 
 ## Q2
-From the p-value matrix we calculated, we can count the number of tests that are significant at the $\alpha=0.05$ and $0.01$?
+From the p-value matrix we calculated, we can count the number of tests that are significant at the $\alpha=0.05$ and $0.01$:  
 
 ```{r}
 less_01 <- sum(pvals <= 0.01)
@@ -131,6 +116,7 @@ Benjamini & Hochberg: $\quad \alpha^{*}= \max\{p_{k}:p_{k}\leq q \frac{k}{K}\}$
 </center>
 
 ```{r}
+# function for calculating FDR cutoff, given q
 fdr_cut_c <- function(pvals, q){
   pvals = pvals[!is.na(pvals)]
   K = length(pvals)
@@ -138,7 +124,7 @@ fdr_cut_c <- function(pvals, q){
   alpha = max(pvals[ pvals<= (q*k/K) ])
   alpha
 }
-
+# calculating FDR cutoff for FDR = 1%, storing
 cutoff01 <- fdr_cut_c(pvals, 0.01)
 ```
 
@@ -152,9 +138,9 @@ plot_w = 1:400
 
 ggplot() +
   geom_point(aes(k[plot_w], pk[plot_w]), size = 0.1)+
-  
   geom_line(aes(k[plot_w], ((q/K)*k)[plot_w], color = 'FDR = 0.01'))+
-  geom_area(aes(k[plot_w], ((q/K)*k)[plot_w], fill = 'rejection area'), alpha = 0.25)+
+  geom_area(aes(k[plot_w], ((q/K)*k)[plot_w], 
+                fill = 'rejection area'), alpha = 0.25)+
   
   labs(title = "FDR = 1%", 
        subtitle = paste("Smallest", length(plot_w), "p-values"),
@@ -165,7 +151,7 @@ ggplot() +
   scale_fill_manual(values = c('green'), labels = c('rejection area'))
 ```
 
-P-value cutoff for 1% FDR = `r cutoff01`
+The p-value cutoff for 1% FDR is *`r cutoff01`.*  
 
 ## Q4
 ```{r}
@@ -173,13 +159,12 @@ num_disc <- sum(pvals<=cutoff01)
 p_k <- K*cutoff01
 ```
 
-We find `r num_disc` discoveries at q = 0.01. We expect `r p_k` to be false (= $P_{(k)}K$)
+We find `r num_disc` discoveries at q = 0.01. We expect `r p_k` to be false (= $P_{(k)}K$).  
 
 ## Q5
 
-What are the 10 most significant words?  Was 'addictive' significant'? Do these results make sense to you? (2 sentence max)  
-
 ```{r}
+# extract top 10 words from p-value df
 o = order(pvals)
 top10 <- pvals[o][1:10]
 top10 <- cbind(rownames(top10), top10)
@@ -194,10 +179,12 @@ kable(top10, col.names = c("Word", "Significance Level"))%>%
 ```
 
 ```{r}
+# boolean variable to print if additive is significant or not
 ad_sig <- pvals['addictive'] < cutoff01
 sig_text = c('is not', 'is')
 cat(paste("Addictive", sig_text[ad_sig + 1], 'significant.'))
 ```
+
 These results do make sense to us, as most of these words seem to have a clear connection (intuitively) to review rating. However, more neutral words like 'but', 'same', and 'not' are not as obvious in their connection to review rating. 
 
 
@@ -206,19 +193,20 @@ What are the advantages and disadvantages of our FDR analysis? (4 sentence max)
 
 <b>Advantages</b>
 <ul>
-<li>Can be more confident that the words we're looking at don't have a false positive effect on review rating</li>
-<li>Doesn't collapse as n increases, unlike Bonferonni correction</li>
+<li>We can be more confident that the words we're looking at don't have a false positive (i.e. insignificant but appears significant) effect on review rating</li>
+<li>It doesn't collapse as n increases, unlike the Bonferonni correction</li>
   <ul>
-  <li>Controls for a low proportion of false positives instead of guarding against false positives</li>
-  <li>Increased statistical power/fewer type 1 errors</li>
+  <li>It controls for a low proportion of type 1 errors instead of guarding against them (also could be disadvantageous)</li>
   </ul>
 </ul>
 ***
 <b>Disadvantages</b>
 <ul>
-<li>Controls for a low proportion of false positives instead of guarding against false positives</li>
-<li>N-gram/text processing -- having 2 or more words grouped together changes their meaning</li>
-<li>Words don't exist in isolation -- in a sentence, words influence each other and certain reviewers may have written a larger proportion of reviews who may use extreme words, i.e. predicting individual reviewers' ratings, not ratings generally</li>
-<li>Self-selection of negative reviewers</li>
+<li>Fails to account for n-gram in text processing -- having 2 or more words grouped together changes their meaning</li>
+<li> Certain reviewers with extreme word choices may have written a larger proportion of reviews. This would result in us predicting more of these  reviewers' ratings, not ratings generally</li>
+  <ul>
+  <li><em>Could be accounted for by using reviewer ID in our model</em></li>
+   </ul>
+<li>Self-selection could be producing a higher proportion of negative reviewers</li>
 </ul>
 
