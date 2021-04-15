@@ -1,0 +1,337 @@
+---
+title: "Homework 2"
+author: "Group 8"
+date: "4/14/2021"
+output: github_document
+    # toc: true 
+    # toc_float: true
+    # theme: united
+    # highlight: haddock
+---
+
+```{r setup, message=F}
+library(tidyverse)
+library(tidymodels)
+library(kableExtra)
+library(here)
+homes = read_csv("https://codowd.com/bigdata/hw/hw2/homes2004.csv")
+```
+
+# Data
+We will be examining data about house sales, which include a number of variables about house price/mortgage, distnace from airports, and more. See this [Codebook](https://codowd.com/bigdata/hw/hw2/homes2004code.txt) for interpretation of all variables used.  
+
+## Tidy Data
+
+First, we will re-code and tidy the data from characters to binaries and factored levels.
+
+```{r, eval = F}
+# Determine the # of levels/unique obs for each var
+lapply(homes,function(x) length(unique(x)))
+# > Lots of vars with only 2 levels (Y/N, T/F)
+```
+
+```{r} 
+#For each var, find uniq values, sort (if 2 uniq obs),
+#recode as binary 
+for (i in 1:ncol(homes)) { 
+  uniques = unique(homes[[i]]) 
+  uniques = sort(uniques)
+  if (length(uniques) != 2) next 
+  if (uniques[1] == "N" & uniques[2] == "Y") { 
+    homes[[i]] = (homes[[i]] == "Y") 
+  } else { #Otherwise, print problem columns 
+    print(i)
+    print(uniques) 
+  }
+}
+```
+
+There appear to be misbehaving columns (columns with two values that are not Yes or No). They are:   
+```{r}
+colnames(homes)[c(11,12,21,27)]
+```
+
+These columns are not easily converted into binaries, as the two values for each variable are distinct. For these, and for other character-type variables with more than two unique values, we will re-code them as factors (see the model recipe pre-processing below).  
+
+
+# Questions
+
+## Q1 - Regression
+
+#### Create model
+
+```{r}
+# initialize model
+mod1 <- linear_reg()%>%
+  set_engine("lm")%>%
+  set_mode("regression")
+
+# pre-process data, write formula 
+mod1_rec <- recipe(LPRICE ~ ., data = homes) %>%
+  update_role(ETRANS, AMMORT, new_role = "id")%>% # remove variables
+  step_log(LPRICE, skip = T)%>% # log transform outcome
+  step_string2factor(all_nominal(), -all_outcomes()) # all str vars as factors
+
+# fit model
+homes_wf <- workflow() %>%
+  add_model(mod1)%>% # add model type
+  add_recipe(mod1_rec) # process dat, add formula
+
+mod1_fit <- homes_wf %>% # fit model
+  fit(homes) 
+
+mod1_ncoef <- nrow(tidy(mod1_fit))
+```
+
+As you can see, there are `r mod1_ncoef` coefficients (predictors) in this model (including the intercept).   
+  
+#### $R^2$ for this model
+```{r}
+# get predictor values
+homes_process <- bake(prep(mod1_rec), homes)
+homes_process$predict <- predict(mod1_fit, new_data = homes_process)$.pred
+
+# calculate R-squared for model
+mod1_r <- as.numeric(rsq(homes_process, truth = log(LPRICE), estimate = predict)[3])
+```
+  
+The $R^2$ is *`r mod1_r`* for this model. 
+
+## Q2 - FDR, variable selection
+
+```{r}
+# generate FDR cutoff p-value for data
+q = 0.05 # set level
+mod1_FDR <- tidy(mod1_fit) %>%
+  select(p.value)%>% # from model p-values, 
+  mutate(k = min_rank(p.value)) %>% #sort by rank
+  filter(p.value <= (q*k/n()))%>% # for those <= qk/K
+  summarise(alpha = max(p.value))%>% # get max
+  as.numeric() 
+
+# get variable names of those over FDR threshold
+bad_vars <- tidy(mod1_fit) %>%
+  filter(p.value > mod1_FDR)%>% #only 4 don't make the cut!
+  select(term)%>% arrange(term)%>% 
+  c() %>% unlist(use.names = F)
+
+# update recipe so remove vars over FDR thresh
+fdr_rec <- mod1_rec %>%
+  # do not use STATECO/STATECT, factor var has signif levels
+  step_rm(!!!syms(bad_vars[1:2]), skip = T)
+
+homes_fdr_wf <- homes_wf %>%
+  update_recipe(fdr_rec)
+
+fdrmod_fit <- homes_fdr_wf %>% # fit model
+  fit(homes) 
+```
+
+#### $R^2$ for this model
+```{r}
+# get predictor values
+homes_fdr <- bake(prep(fdr_rec), homes)
+homes_fdr$predict <- predict(fdrmod_fit, new_data = homes_fdr)$.pred
+
+# calculate R-squared for model
+fdrmod_r <- as.numeric(rsq(homes_fdr, truth = log(LPRICE),
+                           estimate = predict)[3])
+```
+
+The $R^2$ is *`r fdrmod_r`* for this model. It differs from our first model by `r fdrmod_r - mod1_r`. This drop in $R^2$ occurred because we dropped two variables from our model based on our p-value threshold set by our FDR of 5%, which had accounted for a small amount of variation in our outcome variable (SSR), but are now adding to the residual error (SSE), hence increasing our $R^2$ ($= 1 - \frac{SSE}{SST}$).   
+
+## Q3 - Logit
+
+Now, we will make a binary variable indicating whether or not buyers had at least a 20% down payment to do some classification with logit models. 
+Fit a logit to predict this binary using all variables except mortgage, price.
+Fit a logit using the variables interacted (once) with eachother. (Hint: `y~ .^2` will interact everything, and parenthesis may help) (warning: this may take a while. ~2 minutes on my laptop).
+
+```{r}
+# prep data
+homes2 <- homes %>%
+  # dummy var if mortgage was less than 80% of price
+  mutate(downpay_20 = as.factor(if_else(AMMORT < 0.8*LPRICE, 1, 0)))
+```
+
+#### Create Initial Classification Model 
+
+First, we will create a model to predict if buyers had at least a 20% down payment or not using all variables but mortgage and price. 
+```{r}
+# create model to predict binary w/ all vars except mortgage and price
+logit <- logistic_reg()%>%
+  set_engine("glm")
+
+# pre-process data, write formula 
+logit_rec <- recipe(downpay_20 ~ ., data = homes2) %>%
+  update_role(AMMORT, LPRICE, new_role = "id")%>% # remove variables
+  step_string2factor(all_nominal(), -all_outcomes())
+
+# fit model
+logit_wf <- workflow() %>%
+  add_model(logit)%>% # add model type
+  add_recipe(logit_rec) # process data, add formula
+
+log1_fit <- logit_wf %>% # fit model
+  fit(homes2) 
+
+log1_ncoef <- nrow(tidy(log1_fit))
+```
+
+#### Create Interacting Classification Model 
+
+Then, we will create the a model for the same classification purpose, but we will interact all terms in the model with each other 
+```{r bigboi}
+logit_rec_int <- logit_rec %>%
+  step_interact(terms =downpay_20 ~ (. )^2)
+
+logit_wf2 <- logit_wf %>%
+  update_recipe(logit_rec_int)
+
+log2_fit <- logit_wf2 %>% # fit model
+  fit(homes2)
+
+log2_ncoef <- nrow(tidy(log2_fit))
+```
+
+#### Compare Models
+
+```{r, echo = FALSE}
+model = c("No Interaction", "Interaction")
+nocoef = c(log1_ncoef, log2_ncoef)
+tibble("Model" = model,  "# of Coefficients" = nocoef)%>%
+  kable(caption = "Difference in Number of Coefficients") %>%
+  kable_styling(bootstrap_options = "hover")%>% row_spec(2, bold = T)
+```
+
+The second model, with all terms interacting with each other, has 916 terms, 874 terms more than the first model.  
+
+```{r}
+# deviance values from summary of models
+# Model 1
+null_dev1 <- log1_fit[["fit"]][["fit"]][["fit"]][["deviance"]]
+res_dev1 <- log1_fit[["fit"]][["fit"]][["fit"]][["null.deviance"]]
+log1_r <- 1 - (null_dev1/res_dev1)
+
+# Modle 2
+null_dev2 <- log2_fit[["fit"]][["fit"]][["fit"]][["deviance"]]
+res_dev2 <- log2_fit[["fit"]][["fit"]][["fit"]][["null.deviance"]]
+log2_r <- 1 - (null_dev2/res_dev2)
+# get predictor values + R^2 for Model 2
+
+```
+
+The $R^2$ for the first model, the simple classification model, is `r log1_r`.   
+The $R^2$ for the secnd model, the classification model with all interactions, is `r log2_r`.   
+
+At this stage, I'd prefer the first model. The second model appears to be super over-fit to the data, and paring down which variables are meaningful is likely not as efficient as seeing which variables are.  
+
+## Q4 - Out of Sample A
+```{r}
+# Split data into training and testing (based on ETRANS is T/F)
+etran_train <- homes %>% filter(ETRANS)
+etran_test <- homes %>%  filter(!ETRANS)
+
+# check sample size for split data
+cat("TRAIN: ", nrow(etran_train))
+cat("\nTEST: ", nrow(etran_test))
+```
+  
+```{r}
+# fit model
+etrans_rec <- mod1_rec %>%
+  step_filter(ETRANS) # only use obs for which ETRANS is T
+homes_et_rec <- homes_wf %>% 
+  update_recipe(etrans_rec) # update recipe
+etrans_fit <- homes_et_rec %>% 
+  fit(data = etran_train) # fit model on ETRANS is T
+
+# predict model with ETRANS is F
+etran_test$predicted <- predict(etrans_fit, new_data = etran_test)$.pred
+```
+
+```{r}
+# Out of sample vs real outcome plot: 
+# compare results
+ggplot(etran_test, aes(x = log(LPRICE), y = predicted))+
+  geom_point(alpha = 0.2)+
+  geom_smooth(color = "red")+
+  geom_abline(intercept = 0, color = "green")+
+  labs(title = "Predicted vs Actual Values of log(PRICE)",
+       subtitle = "Model trained on ETRANS = T, tested on ETRANS = F",
+       x = "Actual", y = "Predicted")
+```
+
+ETRANS indicated if a house was within an airport or 4-lane highway within a half a block. These houses tend to be less expensive. By training only on ETRANS = T, we are training the model on cheaper houses, so when the houses are more expensive (as evident in the graph), the model performs more poorly.  
+
+## Q5 - Out of Sample B
+
+First, we will randomly select a holdout sample of 1000 observations for training, and the rest for testing later. 
+
+```{r}
+# split initial data into testing and training datasets 
+homes_split <- initial_split(homes2, prop = 1000/nrow(homes))
+homes_train <- training(homes_split)
+homes_test <- testing(homes_split)
+```
+
+Then, we will re-fit both models from Q3 on the training data.  
+```{r, include = FALSE, echo = FALSE}
+# pre-process data, write formula 
+refit_rec1 <- recipe(downpay_20 ~ ., data = homes_train) %>%
+  update_role(AMMORT, LPRICE, new_role = "id")%>% # remove variables
+  step_string2factor(all_nominal(), -all_outcomes())
+refit_rec2 <- refit_rec1 %>%
+  step_interact(terms = downpay_20 ~ (. )^2)
+```
+
+```{r}
+# fit model
+logit_refit_wf <- workflow() %>%
+  add_model(logit)%>% # add model type
+  add_recipe(refit_rec1) # process data, add formula
+
+log1_refit <- logit_refit_wf  %>%
+  fit(homes_train) # fit data
+```
+
+#### Create Interacting Classification Model 
+
+Then, we will create the a model for the same classification purpose, but we will interact all terms in the model with each other. 
+
+```{r bigboi2}
+#fit model
+logit_refit_wf2 <- logit_refit_wf %>%
+  update_recipe(refit_rec2)
+
+log2_refit <- logit_refit_wf2  %>%
+  fit(homes_train) # fit data
+```
+
+#### Predicting for Both Models  
+
+Now, we will make predictions using the testing data ('holdout sample') for both models.  
+```{r}
+homes_test$predict1 <- predict(log1_refit, new_data = homes_test)$.pred_class
+homes_test$predict2 <- predict(log2_refit, new_data = homes_test)$.pred_class
+```
+
+```{r}
+log1_met<-metrics(homes_test, truth = downpay_20,estimate = predict1)
+log2_met<-metrics(homes_test, truth = downpay_20,estimate = predict2)
+
+```
+Randomly select a holdout sample of 1000 observations (hint: the `sample` function). Fit both models from Q3 again using the remaining observations (hint: `homes[-indices,]` will give `homes` but without the observations indexed by the vector `indices`). Make predictions for the holdout sample using each model.
+
+Calculate the prediction error for each observation in the holdout sample. What are the mean squared errors for each of these models out of sample? Which model would you prefer at this stage?
+
+# Submission
+
+As before, submit on canvas in groups. Due Date is Wednesday April 14th at midnight. Solutions will be discussed in class on April 15th. 
+
+# Optional Exercises
+
+1. Use a random holdout sample for Q4. How does this change your results?
+2. Instead of selecting variables using FDR in Q2, install the 'glmnet' package and run a LASSO. How many variables do you drop?
+3. Calculate the out-of-sample deviance for each model in Q5. Which is better now?
+
+
