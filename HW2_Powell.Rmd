@@ -11,85 +11,52 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE) 
-library(tidyverse)
-library(kableExtra)
+library(tidyverse) # for tidying data
+library(kableExtra) # for tables
+# load data
+homes = read_csv("https://codowd.com/bigdata/hw/hw2/homes2004.csv")
+
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE) 
 ```
-
-# Introduction
-
-We have a dataset consisting of a lot of descriptive information about a number of home sales. We're going to focus on predicting sale prices and whether or not the down payment is at least 20%. 
 
 # Data
+We will be examining data about house sales, which include a number of variables about house price/mortgage, distabce from airports, and more. See this [Codebook](https://codowd.com/bigdata/hw/hw2/homes2004code.txt) for interpretation of all variables used.  
 
-The data is available at [https://codowd.com/bigdata/hw/hw2/homes2004.csv](https://codowd.com/bigdata/hw/hw2/homes2004.csv). 
+## Tidy/Re-code Data
 
-There is a "codebook", which describes all the variables, posted at [https://codowd.com/bigdata/hw/hw2/homes2004code.txt](https://codowd.com/bigdata/hw/hw2/homes2004code.txt).
-
-## Importing Data
-
-```{r, message=F}
-library(tidyverse)
-homes = read_csv("https://codowd.com/bigdata/hw/hw2/homes2004.csv")
-homes
+First, we will re-code and tidy the data from characters to binaries and factored levels.
+```{r, eval = F}
+# Determine the # of levels/unique obs for each var
+lapply(homes,function(x) length(unique(x)))
+# > Lots of vars with only 2 levels (Y/N, T/F)
 ```
 
-## Cleaning it up
-
-Lots of the data is stored as characters, even though they look like binary variables. Lets fix that.
-
-First, I'll make sure that is really what is happening.
-
-```{r cleaning}
-# I could look at every observation, but that will be time consuming.
-# Instead I'll look at each column, and see how many values it takes.
-levels(as.factor(homes$EABAN))
-# So EABAN only takes values Y and N. 
-# Look at another Variable.
-levels(as.factor(homes$STATE))
-# Other variables take many levels. So we want to see which columns only take two values.
-length(levels(as.factor(homes$BATHS)))
-#Baths takes a lot of values. So it isn't binary.
-
-# But typing things out and running this code for every column is also time consuming. 
-
-# Let's do it all at once using "apply".
-#First we build a function that does the above. It takes a variable "x", and finds how many values that variable takes.
-apply_helper = function(x) length(levels(as.factor(x)))
-# As an aside, the following would also work. 
-apply_helper = function(x) length(unique(x))
-#Tell apply to look at the data frame "homes". Then tell it to look at each column (rather than each row) (this is the "2"). Then run our function on each column of the dataframe 
-apply(homes,2,apply_helper)
-```
-
-So we can conclude that for a sizeable number of variables, there are only two values, "Y" and "N". Let's convert them into Binary's that we can interpret easily. 
-
-There are more complicated and "prettier" ways to do this, but sometimes simplicity is its own value.
-
-```{r cleaning2} 
-for (i in 1:ncol(homes)) { #For each column
-  uniques = unique(homes[[i]]) #Find the unique values
-  uniques = sort(uniques) #Sort the values (so "N" is before "Y")
-  #If there are too many unique values, move to the next column
+```{r} 
+#For each var, find uniq values, sort (if 2 uniq obs),
+#recode as binary 
+for (i in 1:ncol(homes)) { 
+  uniques = unique(homes[[i]]) 
+  uniques = sort(uniques)
   if (length(uniques) != 2) next 
-  #If the 2 unique values are correct, (match: "N","Y")
   if (uniques[1] == "N" & uniques[2] == "Y") { 
-    homes[[i]] = (homes[[i]] == "Y") #Replace with a binary.
-  } else { #Otherwise 
-    print(i) #Print the column number
-    print(uniques) #And the values
+    homes[[i]] = (homes[[i]] == "Y") 
+  } else { #Otherwise, print problem columns 
+    print(i)
+    print(uniques) 
   }
 }
 ```
 
-Okay, lets look at the misbehaving columns
+Now that we've recoded the Y/N variables as binaries, lets look at the misbehaving columns to see if we need to do anything else.
 
-```{r}
+```{r, eval = FALSE}
 colnames(homes)[c(11,12,21,27)]
 ```
 
-They seem to be a mix of things, which aren't all that cleanly converted into binaries.
-There are still a few other oddball variables around. In particular, we have a few character vectors with more than 2 values (e.g. State). Lets convert all the characters to factors (they all take a limited number of values anyhow).
+They seem to be a mix of things, which aren't all that cleanly converted into binaries. To deal with this, we will re-code all character vectors with more than 2 values (e.g. State) or the variables that didn't cleanly covert into factors.
 
 ```{r change columns}
 # In the homes data, look "across" columns and change ("mutate") the ones that are characters (is.character) into factors ("as.factor")
@@ -100,10 +67,12 @@ homes = homes %>% mutate(across(where(is.character),as.factor))
 # Questions
 
 ## Q1 - Regression
-Regress log(price) against all the variables except mortgage and ETRANS (hint: `y~. -VarNAME` will regress on everything except VarNAME). What is the $R^2$? How many coefficients are there?
+First, we will regress log(price) against all the variables except mortgage (AMMRT) and ETRANS.  
 
 ```{r linear model}
+# create model
 mod1 <- glm(log(LPRICE) ~ . -AMMORT -ETRANS, data = homes)
+# calculate R^2
 get_R <- function(lmod){
   lsumm = summary(lmod)
   Rsquared = 1 - (lsumm$deviance/lsumm$null.deviance)
@@ -115,24 +84,26 @@ For this regression, we get an $R^2$ value of `r get_R(mod1)` with `r length(var
 
 ## Q2 - FDR, variable selection
 
-Rerun the regression with just those variables that are significant at a 5% FDR (hint: `summary(mod1)$coefficients[,4]` may be helpful assuming your regression in Q1 was named `mod1`). If a factor has some significant levels, keep the entire factor in. What is the new $R^2$? What happened with the $R^2$? Why? (2 sentences total)
+Next, we will re-run the regression with just the variables that are significant at a 5% FDR (h). If a factor has some significant levels, keep the entire factor in. What is the new $R^2$? What happened with the $R^2$? Why? (2 sentences total)
 
 ```{r refine lm}
-# Get pval cutoff for 5% FDR
-fdr_cut_c <- function(pvals, q){
-  pvals = pvals[!is.na(pvals)]
-  K = length(pvals)
-  k = rank(pvals, ties.method="min")
-  alpha = max(pvals[ pvals<= (q*k/K) ])
-  alpha
-}
+# generate FDR cutoff p-value for data
+q = 0.05 # set rate at 5%
+
 pvals <- summary(mod1)$coefficients[,4]
-cutoff <- fdr_cut_c(pvals, 0.05)
+
+FDR_thresh <- tibble(pvals)%>%
+  select(pvals)%>%# from model p-values, 
+  mutate(k = min_rank(pvals)) %>% #sort by rank
+  filter(pvals <= (q*k/n()))%>% # for those <= qk/K
+  summarise(alpha = max(pvals))%>% # get max
+  as.numeric() 
 
 # Get names of vars to be cutoff
 varnames <- variable.names(mod1)
-bad_names <- varnames[as.numeric(pvals) > cutoff]
+bad_names <- varnames[as.numeric(pvals) > FDR_thresh]
 bad_names
+
 # New Data frame without cut vars
 sig_homes <- homes[!(names(homes) %in% bad_names)]
 mod2 <- glm(log(LPRICE) ~ . -AMMORT -ETRANS, data = sig_homes)
@@ -143,52 +114,72 @@ The $R^2$ for this new regression is `r get_R(mod2)` being less than the first m
 
 
 ## Q3 - Logit
-Make a binary variable indicating whether or not buyers had at least a 20% down payment (i.e. the mortgage value is less than 80% of the price). Fit a logit to predict this binary using all variables except mortgage, price. Fit a logit using the variables interacted (once) with eachother. (Hint: `y~ .^2` will interact everything, and parenthesis may help) (warning: this may take a while. ~2 minutes on my laptop).
 
-How many more coefficients does the second model have? What are the $R^2$ values of each model (hint: the model output stores deviance and null deviance)? Which model would you prefer for predictions at this stage? (1 sentence)
+Now, we will make a binary variable indicating whether or not buyers had at least a 20% down payment (i.e., mortgage value is less than 80% of the price) to do some classification with logit models. 
 
+First, we will fit a logit to predict this binary using all variables except for mortgage (AMMORT) and price (LPRICE), as we used those to create the binary itself.  
 ```{r create logit models}
+# add binary classification for mortgage
 homes <- homes %>%
   mutate(dp20 = as.numeric((AMMORT/LPRICE) <= 0.8))
-sig_homes <- sig_homes %>%
-  mutate(dp20 = as.numeric((AMMORT/LPRICE) <= 0.8))
+
+# generate model
 mod3 <- glm(dp20 ~ (. -AMMORT -LPRICE), data = homes, family = binomial)
-mod4 <- glm(dp20 ~ (. -AMMORT -LPRICE)^2, data = homes, family = binomial)
+
+# number of coefficients (including intercept)
 varlen3 <- length(variable.names(mod3))
+```
+  
+Then we will fit the same model, but with all variables interacted (once) with each other.    
+```{r}
+# generate model
+mod4 <- glm(dp20 ~ (. -AMMORT -LPRICE)^2, data = homes, family = binomial)
+
+# number of coefficients (including intercept)
 varlen4 <- length(variable.names(mod4))
-varlen4
+cat("Coefficients in model (including intercept):", varlen4)
+```
+  
+The second model has `r varlen4-varlen3` more coefficients.
+```{r check Rs}
+# calculate R^2 for both models
+rvals <- c(get_R(mod3), get_R(mod4))
 ```
 
-The second model has `r varlen4-varlen3` more coefficients.
-
-```{r check Rs}
-rvals <- c(get_R(mod3), get_R(mod4))
+```{r, echo = FALSE, include = TRUE}
 mods <- c('Without Interactions', 'With Interactions')
 tibble(mods, rvals) %>%
-  # rename('Logit Models' = )
   kable(col.names = c('Logit Model', 'R Squared') ) %>%
   kable_styling(bootstrap_options = 'hover')
 ```
 
-While the model with interactions has a lower $R^2$ we would 
-
-
+The model with interactions has a lower $R^2$, and thus at this stage, we would prefer it to the model without interactions. However, we would be wary, as this model is quite complex and may be over-fitting the data.  
+  
 ## Q4 - Out of Sample A
-Estimate the model in Q1 using only data where ETRANS is TRUE. Then test how well that model performs by making predictions for the data where ETRANS is FALSE. Show the out-of-sample fitted vs real outcome plot (hint: it may be helpful to add both a 45 degree line, and the best fit line). Describe what happened here (max 2 sentences, variable codebook may help you).
+Now, we will estimate the same model as in Q1, but using only data where ETRANS is TRUE.   
 
-```{r train model on etrans true}
-etran_t <- homes %>%
-  filter(ETRANS)
-etran_f <- homes %>%
-  filter(!ETRANS)
+First, we will split the data into subsets where ETRANS is TRUE (training) and ETRANS is FALSE (testing).  
+```{r split data}
+# Split data into training and testing (based on ETRANS is T/F)
+etran_t <- homes %>% filter(ETRANS)
+etran_f <- homes %>%  filter(!ETRANS)
+
+# check sample size for split data
+cat("TRAIN: ", nrow(etran_t))
+cat("\nTEST: ", nrow(etran_f))
+```
+
+Then we will train the model on the training data (ETRANS = T), and see how well it performs by making predictions using our testing data (ETRANS = F). Show the out-of-sample fitted vs real outcome plot (hint: it may be helpful to add both a 45 degree line, and the best fit line). Describe what happened here (max 2 sentences, variable codebook may help you).
+```{r train on etrans_t}
+# train model on training data, ETRANS = T
 mod5 <- glm(log(LPRICE) ~ . -AMMORT -ETRANS, data = etran_t)
-test_mod5 <- predict(mod5, newdata = etran_f)
-compare <- data.frame(test_mod5, log(etran_f$LPRICE))
-names(compare) = c('Predictions','True Values')
+
+# predict using testing data, ETRANS = F
+etran_f$predictions <- predict(mod5, newdata = etran_f)
 ```
 
 ```{r plot predictions}
-ggplot(compare, aes(`True Values`, Predictions))+
+ggplot(etran_f, aes(x = log(LPRICE), y = predictions))+
   geom_point(size = 0.1, alpha = 0.2)+
   geom_abline(intercept = c(0,0), slope = 1, color =  'red')+
   
@@ -197,34 +188,46 @@ ggplot(compare, aes(`True Values`, Predictions))+
   theme_minimal()
 ```
 
-The model seems to actually fit the data relatively well where log price is between about 12 and 14. However, there is a massive amount of variance in the residuals as well as a large number of outliers leaving this model somewhat tenuous. 
+The model seems to actually fit the data relatively well where log price is between about 12 and 14, but has a decent number of outliers and huge amount of variance in the residuals, leaving this model somewhat tenuous.   
 
 Predictions fall apart at large and small log prices. ETRANS indicated if a house was within an airport or 4-lane highway within a half a block. These houses tend to be less expensive. By training only on ETRANS = T, we are training the model on cheaper houses, so when the houses are more expensive (as evident in the graph), the model performs more poorly.
 
 ## Q5 - Out of Sample B
-Randomly select a holdout sample of 1000 observations (hint: the `sample` function). Fit both models from Q3 again using the remaining observations (hint: `homes[-indices,]` will give `homes` but without the observations indexed by the vector `indices`). Make predictions for the holdout sample using each model. Calculate the prediction error for each observation in the holdout sample. What are the mean squared errors for each of these models out of sample? Which model would you prefer at this stage?
 
+Finally, we will randomly split our data into testing and training (with 1000 observations in the training data), and see hwo well it performs.    
 
+First, we will randomly select a holdout sample of 1000 observations for training, and the rest for testing later.   
 ```{r recreate logit models holding out testing data}
+set.seed(123)
 holdout <- sample.int(nrow(sig_homes), 1000)
 training <- sig_homes[-holdout,]
 testing <- sig_homes[holdout,]
+```
+
+Then, we will re-fit our models from Q3 using the training data.  
+```{r}
+# train on testing data, 1000 randomly selected observations
 mod6 <- glm(dp20 ~ (. -AMMORT -LPRICE), data = training, family = binomial)
 mod7 <- glm(dp20 ~ (. -AMMORT -LPRICE)^2, data = training, family = binomial)
+```
 
+With these newly-fitted models, we will then make predictions for the testing data (holdout sample), using each model. We will assess the accuracy of these models by calculating the mean squared errors for each of the models out of sample (using the prediction error for each observation in the testing data).  
+```{r}
 pred6 <- predict(mod6, newdata = testing, type = 'response')
 pred7 <- predict(mod7, newdata = testing, type = 'response')
 test_vals <- testing$dp20
 
+# calculate MSE for both models
 get_mse <- function(ypred, ytrue){
-  pe <- ytrue - ypred
-  mean(pe**2)
+  pe <- ytrue - ypred # subtract actual from predicted
+  mean(pe**2) # mean square of deviance
 }
 mse6 <- get_mse(pred6, test_vals)
 mse7 <- get_mse(pred7, test_vals)
 ```
 
-```{r mse table}
+The MSE for each model is:  
+```{r mse table, echo = FALSE}
 errors <- c(mse6, mse7)
 mods <- c('Without Interactions', 'With Interactions')
 tibble(mods, errors) %>%
@@ -234,16 +237,5 @@ tibble(mods, errors) %>%
 
 At this stage, we would prefer the model without interactions as it has a much more manageable number of coefficients as well as marginally smaller MSE. 
 
-The model with interactions is more likely to over fit here as the number of coefficients is extremely high and it performs worse on OOS predictions.
-
-# Submission
-
-As before, submit on canvas in groups. Due Date is Wednesday April 14th at midnight. Solutions will be discussed in class on April 15th. 
-
-# Optional Exercises
-
-1. Use a random holdout sample for Q4. How does this change your results?
-2. Instead of selecting variables using FDR in Q2, install the 'glmnet' package and run a LASSO. How many variables do you drop?
-3. Calculate the out-of-sample deviance for each model in Q5. Which is better now?
-
+The model with interactions is more likely to over fit here as the number of coefficients is extremely high and it performs worse on OOS predictions.  
 
