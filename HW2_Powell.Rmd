@@ -185,8 +185,8 @@ names(compare) = c('Predictions','True Values')
 ```
 
 ```{r plot predictions}
-ggplot(compare, aes(Predictions, `True Values`))+
-  geom_point(aes(color = Predictions - `True Values`))+
+ggplot(compare, aes(`True Values`, Predictions))+
+  geom_point(aes(color = Predictions - `True Values`), size = 0.1)+
   geom_abline(intercept = c(0,0), slope = 1, color =  'red')+
   
   geom_smooth(method = "loess", color = "orange")+
@@ -196,6 +196,8 @@ ggplot(compare, aes(Predictions, `True Values`))+
 ```
 
 The model seems to actually fit the data relatively well where log price is between about 10 and 12. However, there is a massive amount of variance in the residuals as well as a large number of outliers leaving this model somewhat tenuous. 
+
+Predictions fall apart at larger log prices > 12 maybe investigate difference in price levels for etrans
 
 ## Q5 - Out of Sample B
 Randomly select a holdout sample of 1000 observations (hint: the `sample` function). Fit both models from Q3 again using the remaining observations (hint: `homes[-indices,]` will give `homes` but without the observations indexed by the vector `indices`). Make predictions for the holdout sample using each model. Calculate the prediction error for each observation in the holdout sample. What are the mean squared errors for each of these models out of sample? Which model would you prefer at this stage?
@@ -230,6 +232,8 @@ tibble(mods, errors) %>%
 ```
 
 At this stage, we would prefer the model without interactions as it has a much more reasonable number of coefficients in regards to size of sample as well as a lower MSE on the testing data. 
+
+The model with interractions is more likely to overfit here as the number of coefficients is extremely high. The evidence for this
 
 # Submission
 
