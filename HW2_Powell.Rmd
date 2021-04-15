@@ -111,7 +111,7 @@ get_R <- function(lmod){
 }
 ```
 
-For this regression, we get an $R^2$ value of `r get_R(mod1)` with `r length(variable.names(mod1))-1` coefficients.
+For this regression, we get an $R^2$ value of `r get_R(mod1)` with `r length(variable.names(mod1))` coefficients (including the intercept).
 
 ## Q2 - FDR, variable selection
 
@@ -132,14 +132,14 @@ cutoff <- fdr_cut_c(pvals, 0.05)
 # Get names of vars to be cutoff
 varnames <- variable.names(mod1)
 bad_names <- varnames[as.numeric(pvals) > cutoff]
-
+bad_names
 # New Data frame without cut vars
 sig_homes <- homes[!(names(homes) %in% bad_names)]
 mod2 <- glm(log(LPRICE) ~ . -AMMORT -ETRANS, data = sig_homes)
 rdif <- get_R(mod1) - get_R(mod2)
 ```
 
-The $R^2$ for this new regression is `r get_R(mod2)` being less than the first model by `r rdif`. This change comes from gaining additional residual deviance that was previously explained by the less signficant variables which were cut by the 5% FDR. 
+The $R^2$ for this new regression is `r get_R(mod2)` being less than the first model by `r rdif`. This change comes from gaining additional residual deviance that was previously explained by the less significant variables which were cut by the 5% FDR. 
 
 
 ## Q3 - Logit
@@ -148,12 +148,15 @@ Make a binary variable indicating whether or not buyers had at least a 20% down 
 How many more coefficients does the second model have? What are the $R^2$ values of each model (hint: the model output stores deviance and null deviance)? Which model would you prefer for predictions at this stage? (1 sentence)
 
 ```{r create logit models}
+homes <- homes %>%
+  mutate(dp20 = as.numeric((AMMORT/LPRICE) <= 0.8))
 sig_homes <- sig_homes %>%
-  mutate(dp20 = (AMMORT/LPRICE) <= 0.8)
-mod3 <- glm(dp20 ~ (. -AMMORT -LPRICE), data = sig_homes, family = binomial)
-mod4 <- glm(dp20 ~ (. -AMMORT -LPRICE)^2, data = sig_homes, family = binomial)
+  mutate(dp20 = as.numeric((AMMORT/LPRICE) <= 0.8))
+mod3 <- glm(dp20 ~ (. -AMMORT -LPRICE), data = homes, family = binomial)
+mod4 <- glm(dp20 ~ (. -AMMORT -LPRICE)^2, data = homes, family = binomial)
 varlen3 <- length(variable.names(mod3))
 varlen4 <- length(variable.names(mod4))
+varlen4
 ```
 
 The second model has `r varlen4-varlen3` more coefficients.
@@ -167,7 +170,7 @@ tibble(mods, rvals) %>%
   kable_styling(bootstrap_options = 'hover')
 ```
 
-Honestly I kinda just prefer the model without interactions as the second one takes twenty fucking years and they both suck at minimizing deviance. 
+While the model with interactions has a lower $R^2$ we would 
 
 
 ## Q4 - Out of Sample A
@@ -175,9 +178,9 @@ Estimate the model in Q1 using only data where ETRANS is TRUE. Then test how wel
 
 ```{r train model on etrans true}
 etran_t <- homes %>%
-  subset(ETRANS == TRUE)
+  filter(ETRANS)
 etran_f <- homes %>%
-  subset(ETRANS == FALSE)
+  filter(!ETRANS)
 mod5 <- glm(log(LPRICE) ~ . -AMMORT -ETRANS, data = etran_t)
 test_mod5 <- predict(mod5, newdata = etran_f)
 compare <- data.frame(test_mod5, log(etran_f$LPRICE))
@@ -186,18 +189,17 @@ names(compare) = c('Predictions','True Values')
 
 ```{r plot predictions}
 ggplot(compare, aes(`True Values`, Predictions))+
-  geom_point(aes(color = Predictions - `True Values`), size = 0.1)+
+  geom_point(size = 0.1, alpha = 0.2)+
   geom_abline(intercept = c(0,0), slope = 1, color =  'red')+
   
   geom_smooth(method = "loess", color = "orange")+
   labs(title = 'Predictions of ETRANS=FALSE Data', subtitle = 'Trained on ETRANS=TRUE')+
-  theme_minimal()+
-  theme(legend.title = element_text(), legend.position = c(0.7, 0.3))
+  theme_minimal()
 ```
 
-The model seems to actually fit the data relatively well where log price is between about 10 and 12. However, there is a massive amount of variance in the residuals as well as a large number of outliers leaving this model somewhat tenuous. 
+The model seems to actually fit the data relatively well where log price is between about 12 and 14. However, there is a massive amount of variance in the residuals as well as a large number of outliers leaving this model somewhat tenuous. 
 
-Predictions fall apart at larger log prices > 12 maybe investigate difference in price levels for etrans
+Predictions fall apart at large and small log prices. ETRANS indicated if a house was within an airport or 4-lane highway within a half a block. These houses tend to be less expensive. By training only on ETRANS = T, we are training the model on cheaper houses, so when the houses are more expensive (as evident in the graph), the model performs more poorly.
 
 ## Q5 - Out of Sample B
 Randomly select a holdout sample of 1000 observations (hint: the `sample` function). Fit both models from Q3 again using the remaining observations (hint: `homes[-indices,]` will give `homes` but without the observations indexed by the vector `indices`). Make predictions for the holdout sample using each model. Calculate the prediction error for each observation in the holdout sample. What are the mean squared errors for each of these models out of sample? Which model would you prefer at this stage?
@@ -210,15 +212,14 @@ testing <- sig_homes[holdout,]
 mod6 <- glm(dp20 ~ (. -AMMORT -LPRICE), data = training, family = binomial)
 mod7 <- glm(dp20 ~ (. -AMMORT -LPRICE)^2, data = training, family = binomial)
 
-pred6 <- predict(mod6, newdata = testing)
-pred7 <- predict(mod7, newdata = testing)
-test_vals <- log(testing$LPRICE)
+pred6 <- predict(mod6, newdata = testing, type = 'response')
+pred7 <- predict(mod7, newdata = testing, type = 'response')
+test_vals <- testing$dp20
 
 get_mse <- function(ypred, ytrue){
   pe <- ytrue - ypred
   mean(pe**2)
 }
-
 mse6 <- get_mse(pred6, test_vals)
 mse7 <- get_mse(pred7, test_vals)
 ```
@@ -231,9 +232,9 @@ tibble(mods, errors) %>%
   kable_styling(bootstrap_options = 'hover')
 ```
 
-At this stage, we would prefer the model without interactions as it has a much more reasonable number of coefficients in regards to size of sample as well as a lower MSE on the testing data. 
+At this stage, we would prefer the model without interactions as it has a much more manageable number of coefficients as well as marginally smaller MSE. 
 
-The model with interractions is more likely to overfit here as the number of coefficients is extremely high. The evidence for this
+The model with interactions is more likely to over fit here as the number of coefficients is extremely high and it performs worse on OOS predictions.
 
 # Submission
 
