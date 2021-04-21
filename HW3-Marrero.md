@@ -1,20 +1,27 @@
 Homework 3
 ================
 Group 8
-4/21/2021
+4/21/21
 
 # Data
 
-This homework is going to examine the use of a) stepwise regression and
-b) LASSO for model selection with AIC and cross-validation. We will be
-re-using the home sale data we saw in HW2.
+In this assignment, we examine the use of a *stepwise regression* and a
+*LASSO* for model selection with *AIC and cross-validation*. We are
+using data on home sales (used in a previous assignment). The data
+includes a number of variables about house price/mortgage, number of
+bedrooms/bathrooms, and more. See this
+[Codebook](https://codowd.com/bigdata/hw/hw2/homes2004code.txt) for
+interpretation of all variables in the dataset.
 
 ## Tidy Data
 
-Load in the data. Do the same things we did last week to clean it a bit.
-Add dumy variable indicating if the number of bedrooms and bathrooms for
-a house are both at least two. This is what we will be trying to
-predict.
+First, we will load and tidy the data. This involves converting all
+variables with Y/N responses to binary dummy variables. Additionally, we
+will create a *dummy variable indicating if the number of bedrooms and
+bathrooms for a house are both at least two*, denoted as `twotwo`. We
+will be attempting to predict this variable later in the assignment, but
+it will be used as a predictor while we are still predicting
+log(LPRICE).
 
 ``` r
 # Load data
@@ -40,24 +47,22 @@ homes <- homes %>%
   )
 ```
 
-# Questions
-
-All questions asking you to predict `twotwo` in the data want you to use
-all variables. All questions not regarding `twotwo` should *include*
-`twotwo` in the model selection process (e.g. just don’t try to exclude
-it).
+# Homework Questions
 
 ## Q1 – Stepwise Regression: AIC & BIC
 
-Model 1: Use a forward stepwise linear regression (with AIC based steps)
-to predict `log(LPRICE)` in the data.
+In our first model (Model 1), we will use a forward step-wise linear
+regression (with AIC-based steps) to predict `log(LPRICE)` in the data.
 
 ``` r
-empty <- glm(log(LPRICE) ~ 1, data=homes)
-all <- glm(log(LPRICE) ~ ., data = homes)
-forward_aic <- stats::step(empty, scope=formula(all), 
-                    direction="forward",trace=0, k = 2)
+empty <- glm(log(LPRICE) ~ 1, data=homes) # model w/ no coeff
+all <- glm(log(LPRICE) ~ ., data = homes) # model w/ all coeff
 
+# stepwise regression using empty and full models
+forward_aic <- step(empty, scope=formula(all), 
+                    direction="forward",trace=0) # k=2, AIC
+
+# get num coefficients and aic of resulting model
 mod1_coeff <- length(forward_aic$coefficients)
 mod1_aic <- forward_aic$aic
 ```
@@ -65,14 +70,15 @@ mod1_aic <- forward_aic$aic
 The AIC of the final regression is 3.0290064^{4}. This model has 41
 coefficients, including the intercept.
 
-Model 2: Use a forward stepwise linear regression (with BIC based steps
-- hint: look at the help page for `step`) to predict `log(LPRICE)` in
-the data. How many coefficients does this model have?
+Our second model (Model 2) will use the same forward stepwise linear
+regression, but use BIC based steps.
 
 ``` r
+# stepwise regression using empty and full models
 forward_bic <- stats::step(empty, scope=formula(all), 
-                    direction="forward",trace=0, k = log(nrow(homes)))
+                    direction="forward",trace=0, k = log(nrow(homes))) # k=log(n), BIC
 
+# get num coefficients and bic of resulting model
 mod2_coeff <- length(forward_bic$coefficients)
 mod2_aic <- forward_bic$aic
 ```
@@ -80,13 +86,20 @@ mod2_aic <- forward_bic$aic
 The AIC of the final regression is 3.0318007^{4}. This model has 32
 coefficients, including the intercept.
 
-In two sentences or less, EXPLAIN the reason for the difference in
-number of coefficients between models 1&2.
+### Model Differences
+
+In each ‘step’ of building the model, the best new variable is added
+until it no longer improves the fit criteria, which differ in models 1 &
+2–AIC approximates the relative deviance from a true model, whereas the
+BIC approximates the model truth. This results in the models having a
+differing number of coefficients (BIC being smaller).
 
 ## Q2 – BASIC Cross-Validated LASSO
 
-Use a cross-validated LASSO to predict `log(LPRICE)`. Show the deviance
-plot.
+### Cross-Validated LASSO for predicting log(LPRICE)
+
+Now, we will use a cross-validated LASSO to predict `log(LPRICE)` and
+plot the deviance (in this case, MSE).
 
 ``` r
 xmatrix <- sparse.model.matrix(log(LPRICE)~ .,data=homes)
@@ -97,10 +110,6 @@ plot(cv_mod) # this is probably the right graph?
 
 ![](HW3-Marrero_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
 
-How many possible subsets of the variables in our data are there? (hint:
-`ncol(xmatrix)` ≠ `ncol(homes)`, and `ncol(xmatrix)` is the relevant
-number)
-
 ``` r
 if(ncol(xmatrix) != ncol(homes)){
   cat("There are",ncol(xmatrix),"possible subsets of the variables in our data")
@@ -109,9 +118,11 @@ if(ncol(xmatrix) != ncol(homes)){
 
     ## There are 50 possible subsets of the variables in our data
 
-Model 3: Find the *λ* that minimizes OOS deviance (hint: see `cv.glmnet`
-help page) and the deviance at that *λ* (no need to report either). What
-is the number of non-zero coefficients with that
+### Lamdas
+
+From this model, we will now find the *λ* that minimizes OOS deviance
+(hint: see `cv.glmnet` help page) and the deviance at that *λ* (no need
+to report either). What is the number of non-zero coefficients with that
 *λ*<sub>*m**i**n*</sub>?
 
 ``` r
@@ -125,7 +136,7 @@ deviance.
 n_1se_coeff<- sum(coef(cv_mod, s=cv_mod$lambda.1se) != 0)
 ```
 
-There are 15 non-zero coefficients with the *λ* within 1 standard error
+There are 18 non-zero coefficients with the *λ* within 1 standard error
 of the minimum OOS deviance.
 
 We know that relative to the null distribution, the pseudo
