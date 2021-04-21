@@ -153,7 +153,7 @@ tibble(mods, rvals) %>%
   kable_styling(bootstrap_options = 'hover')
 ```
 
-The model with interactions has a lower $R^2$, and thus at this stage, we would prefer it to the model without interactions. However, we would be wary, as this model is quite complex and may be over-fitting the data.  
+The model with interactions has a higher $R^2$, and thus at this stage, we would prefer it to the model without interactions. However, we would be wary, as this model is quite complex and may be over-fitting the data.  
   
 ## Q4 - Out of Sample A
 Now, we will estimate the same model as in Q1, but using only data where ETRANS is TRUE.   
@@ -198,6 +198,8 @@ Finally, we will randomly split our data into testing and training (with 1000 ob
 
 First, we will randomly select a holdout sample of 1000 observations for training, and the rest for testing later.   
 ```{r recreate logit models holding out testing data}
+sig_homes <- sig_homes %>%
+  mutate(dp20 = as.numeric((AMMORT/LPRICE) <= 0.8))
 set.seed(123)
 holdout <- sample.int(nrow(sig_homes), 1000)
 training <- sig_homes[-holdout,]
