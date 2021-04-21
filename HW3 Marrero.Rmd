@@ -1,7 +1,7 @@
 ---
 title: "Homework 3"
 author: "Group 8"
-date: "4/14/2021"
+date: "4/21/2021"
 output: 
   html_document:
     toc: true
@@ -118,6 +118,7 @@ We know that relative to the null distribution, the pseudo $R^2$ is $1-D/D_0$. W
 # ration larger lambda
 ratio_dev <- 0.4456 / 0.4112 
 ```
+
 The ratio of deviance of the larger model to deviance of the smaller model is `r ratio_dev`. INTERPRET in two sentences or less interpret that ratio.
 
 ## Q3 -- GIANT Models
@@ -143,17 +144,29 @@ In one sentence, how do these OOS deviances compare to the OOS deviances in Q2? 
 
 Using a straightforward linear model to predict a binary is a model structure known as a "linear probability model" (LPM). This is because the $E[Y]$ is still $P(Y=1)$, and the linear model is still optimizing for $E[Y]$, but is purely linear, so we have a linear model of the probability.
 
-```{r}
-
-```
 Model 6: Cross-validate a linear LASSO (no interactions or anything) to predict `twotwo`.
+```{r}
+xmatrix_22 <- sparse.model.matrix(twotwo ~ .,data=homes)
+mod6 <- cv.glmnet(xmatrix_22, homes$twotwo)
+```
+
+DON'T THINK I DID THESE RIGHT! 
 
 Model 7: Cross-validate a logistic LASSO to predict `twotwo` (hint: `family="binomial"`). 
+```{r}
+xmatrix_22_log <- sparse.model.matrix(twotwo ~ .,data=homes, family="binomial")
+mod7 <- cv.glmnet(xmatrix_22_log, homes$twotwo,type.measure="class")
+```
 
-Which model has the smaller deviance? In at most two sentences, why can't we use deviances to compare Model 6 and Model 7? Rerun model 7 but set `type.measure="mse"` in `cv.glmnet`. In at most two sentences, Can we compare these models now? and if so, which is better? 
+Which model has the smaller deviance? In at most two sentences, why can't we use deviances to compare Model 6 and Model 7? 
+
+Rerun model 7 but set `type.measure="mse"` in `cv.glmnet`. 
+```{r}
+mod7 <- cv.glmnet(xmatrix_22_log, homes$twotwo,type.measure="mse")
+```
+In at most two sentences, Can we compare these models now? and if so, which is better? 
 
 ## Q5 -- Changes to Predictions
-
 A well known issue with LPMs is that they frequently predict probabilities that are non-sensical (E.g. they might predict that $P(Y=1) = 110%$, or $P(Y=1) = -10%$). Check your predictions from Model 6 and you'll see that some of them are like this.
 
 One solution to this problem is to use a link function which is constrained to $[0,1]$ -- as the logistic regression does. A different solution is to say "we know those probabilities are nonsense, but for prediction purposes we can easily set them to reasonable values". Specifically, predictions that are greater than 1, we set to 1, and predictions that are less than 0, we set to 0. I've written a simple function below that does this. 
@@ -175,17 +188,11 @@ Given a $\lambda$, could this change to our predictions change the variables we 
 
 Changing our predictions to "certainly FALSE" and "certainly TRUE"  [$\hat y$ either 0 or 1] as the function above does seems extreme. Rewrite the above function so that it takes an input argument `eps_err`, and adds `eps_err` probability of being wrong to all the predictions which claim to be certain. 
 
-
-# Submission
-
-This homework is due by Midnight on Wednesday April 21. As before, submit on canvas in groups, solutions will be discussed in class on April 22. 
-
-# Optional Exercises
-
-1. Build a function that calculates the binomial deviance given predictions and truth.
-2. Take the code from lecture 6, and modify it to run the cross-validation for model 6 by hand.
-    1. Modify the predictions inside the cross-validation so that they are all between $[0,1]$, using an `eps_err=0.001`.
-    2. Instead of returning the MSE of each cross-validated lambda, return the binomial deviance.
-3. Build a fit plot for each of the models in Q4. 
-
-
+```{r}
+lpm_prediction_editor = function(preds, eps_err) {
+  out = preds
+  out[out>= 1] = 1 - eps_err # make prediction less certain from 1
+  out[out<= 0] = 0 + eps_err # make prediction less certain from 0
+  out
+}
+```
