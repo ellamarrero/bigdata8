@@ -2,12 +2,12 @@
 title: "Homework 3"
 author: "Group 8"
 date: "4/21/21"
-output: github_document
-  # html_document:
-  #   toc: true
-  #   toc_float: true
-  #   theme: united
-  #   highlight: haddock
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+    highlight: haddock
 ---
 
 ```{r setup, include=FALSE}
