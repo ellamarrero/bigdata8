@@ -96,6 +96,8 @@ In each 'step' of building the model, the best new variable is added until it no
 Now, we will use a cross-validated LASSO to predict `log(LPRICE)` and plot the deviance (in this case, MSE).
 
 ```{r}
+set.seed(123)
+
 xmatrix <- sparse.model.matrix(log(LPRICE)~ .,data=homes)
 
 cv_mod <- cv.glmnet(xmatrix, log(homes$LPRICE), type.measure="deviance")
@@ -110,7 +112,7 @@ if(ncol(xmatrix) != ncol(homes)){
 
 
 ### Lamdas 
-From this model, we will now find the $\lambda$ that minimizes OOS deviance (hint: see `cv.glmnet` help page) and the deviance at that $\lambda$ (no need to report either). What is the number of non-zero coefficients with that $\lambda_{min}$? 
+From this model, we will now find the $\lambda$ that minimizes OOS deviance.    
 ```{r}
 n_min_coeff<- sum(coef(cv_mod, s=cv_mod$lambda.min) != 0)
 ```
@@ -124,20 +126,21 @@ There are `r n_1se_coeff` non-zero coefficients with the $\lambda$ within 1 stan
 We know that relative to the null distribution, the pseudo $R^2$ is $1-D/D_0$. What we haven't discussed is that we could use a similar method to compare any two models (with the same likelihoods). 
 ```{r}
 # ration larger lambda
-ratio_dev <- 0.4456 / 0.4112 
+ratio_dev <- 0.4110 / 0.4273  
+ratio_dev
 ```
 
-The ratio of deviance of the larger model to deviance of the smaller model is `r ratio_dev`. INTERPRET in two sentences or less interpret that ratio.
+The ratio of deviance of the larger model to deviance of the smaller model is `r ratio_dev`. This ratio represents the percentage of deviance that remains after choosing the larger model (compared to the smaller model). This is equivalent to saying 100-`r ratio_dev*100`% more of the OOS deviance is explained by the larger model.
 
 ## Q3 -- GIANT Models
 
-Model 5: Add interactions (warning: may be slow, hint: you'll need to modify/recreate `xmatrix`) and re-estimate the same cross-validation model as in Q2. How many possible subsets are there now (or at least, what does R say)? 
+For the next model (Model 5), we will add interactions and re-estimate the same cross-validation model as in Q2.  
 ```{r}
 xmatrix_int<- sparse.model.matrix(log(LPRICE)~(.)^2,data=homes)
 cv_mod2 <- cv.glmnet(xmatrix_int, log(homes$LPRICE), type.measure="deviance")
 
 if(ncol(xmatrix_int) != ncol(homes)){
-  cat("There are",ncol(xmatrix_int),"possible subsets of the variables in our data")
+  cat("There are 2^",ncol(xmatrix_int),"possible subsets of the variables in our data")
 }
 ```
 
@@ -145,8 +148,7 @@ Show the CV error plot.
 ```{r}
 plot(cv_mod2)
 ```
-In one sentence, how do these OOS deviances compare to the OOS deviances in Q2? EXPLAIN
-
+The OOS deviance in the model with interactions (0.3824) is smaller than that of the model without interactions (0.4110).     
 
 ## Q4 -- LPM, Deviances, Loss
 
@@ -158,24 +160,30 @@ xmatrix_22 <- sparse.model.matrix(twotwo ~ .,data=homes)
 mod6 <- cv.glmnet(xmatrix_22, homes$twotwo)
 ```
 
-DON'T THINK I DID THESE RIGHT! 
-
 Model 7: Cross-validate a logistic LASSO to predict `twotwo` (hint: `family="binomial"`). 
-```{r}
-xmatrix_22_log <- sparse.model.matrix(twotwo ~ .,data=homes, family="binomial")
-mod7 <- cv.glmnet(xmatrix_22_log, homes$twotwo,type.measure="class")
+```{r, warning=TRUE, message = TRUE}
+set.seed(123)
+xmatrix_22_log <- sparse.model.matrix(twotwo ~ .,data=homes)
+mod7 <- cv.glmnet(xmatrix_22_log, homes$twotwo,type.measure="class", family = "binomial")
 ```
 
-Which model has the smaller deviance? In at most two sentences, why can't we use deviances to compare Model 6 and Model 7? 
+Model 6 has the smaller deviance, but they are not comparable because they're using different measures of deviance. Model 6 uses Mean Squared Error (MSE), using linear regression, while Model 7 uses Misclassification Error, using logistic regression (classification problem, indicates how many it got right as opposed to deviance from predicted outcome). 
 
 Rerun model 7 but set `type.measure="mse"` in `cv.glmnet`. 
 ```{r}
-mod7 <- cv.glmnet(xmatrix_22_log, homes$twotwo,type.measure="mse")
+mod7a <- cv.glmnet(xmatrix_22_log, homes$twotwo,type.measure="mse", family="binomial")
 ```
-In at most two sentences, Can we compare these models now? and if so, which is better? 
+
+We can compare these models now, because they are using the same measures of deviance. Model 7 is better (has a lower MSE) as it uses a link function (log odds) to make predictions that are limited to the same range as the outcome (a binary variable) where model 6 can take on any value within a linear combination of the coefficients. 
 
 ## Q5 -- Changes to Predictions
-A well known issue with LPMs is that they frequently predict probabilities that are non-sensical (E.g. they might predict that $P(Y=1) = 110%$, or $P(Y=1) = -10%$). Check your predictions from Model 6 and you'll see that some of them are like this.
+A well known issue with LPMs is that they frequently predict probabilities that are non-sensical (E.g. they might predict that $P(Y=1) = 110%$, or $P(Y=1) = -10%$). From our predictions for Model 6, some are like this:  
+
+```{r}
+max(predict(mod6, newx = xmatrix_22_log))
+min(predict(mod6, newx = xmatrix_22_log))
+# verified, they are insane values
+```
 
 One solution to this problem is to use a link function which is constrained to $[0,1]$ -- as the logistic regression does. A different solution is to say "we know those probabilities are nonsense, but for prediction purposes we can easily set them to reasonable values". Specifically, predictions that are greater than 1, we set to 1, and predictions that are less than 0, we set to 0. I've written a simple function below that does this. 
 
@@ -188,13 +196,16 @@ lpm_prediction_editor = function(preds) {
 }
 ```
 
-Would using this function for our predictions with Model 6 improve the MSE? 
-Could this change to our predictions change the value of $\lambda$ we should select? 
-Given a $\lambda$, could this change to our predictions change the variables we should choose? Could it change the coefficients on variables we already chose? 
+Using this function for our predictions with Model 6 would improve the MSE, because it would get rid of very large deviances in the predictions.
+
+This change to our predictions would change the value of $\lambda$ we would select, it would likely increase it, because the larger variables that were more costly will be curbed, so they are less costly, in MSE curve.
+
+Given a $\lambda$, this change to our predictions would change the variables we should choose, as mentioned above, it would allow for larger variables that were more costly to potentially remain.   
+It would change the coefficients on variables we already chose because calculated by OLS coefficients times one minus the penalty, so the new penalties would affect coefficient calculations.  
 
 ## Q6 -- purely R
 
-Changing our predictions to "certainly FALSE" and "certainly TRUE"  [$\hat y$ either 0 or 1] as the function above does seems extreme. Rewrite the above function so that it takes an input argument `eps_err`, and adds `eps_err` probability of being wrong to all the predictions which claim to be certain. 
+Changing our predictions to "certainly FALSE" and "certainly TRUE"  [$\hat y$ either 0 or 1] as the function above does seems extreme. To deal with this, we re-wrote the above function so that it takes an input argument `eps_err`, and adds `eps_err` probability of being wrong to all the predictions which claim to be certain:  
 
 ```{r}
 lpm_prediction_editor = function(preds, eps_err) {
@@ -204,3 +215,4 @@ lpm_prediction_editor = function(preds, eps_err) {
   out
 }
 ```
+
