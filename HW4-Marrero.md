@@ -168,7 +168,7 @@ grid, and plot those probabilities.
 preds <- predict(logit_mod,grid,type = "response")
 # plot probabilities 
 ggplot(df,aes(x=grid$x1,y=grid$x2,color=preds))+
-  geom_point(size=0.08)+
+  geom_point(size=0.8, alpha = 0.5)+
   labs(color = "Probabilities", 
        caption = "Calculated with Interacted Logit Model")
 ```
@@ -194,12 +194,34 @@ roc <- function(p,y, ...){
   plot(1-specificity, sensitivity, type="l", ...)
   abline(a=0,b=1,lty=2,col=8)
 }
-
-roc(p=preds, y=df_og$y, bty="n")
 ```
 
-![](HW4-Marrero_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+``` r
+# calculate probabilities for in-sample logit model
+phat_logit <- predict(logit_mod, type = "response")
+
+# calculate probabilities for in-sample KNN model
+df_yno <- df_og %>% select(-y) # remove y from dataset
+phat_k10 <- apply(df_yno,1,knn_prob,x1=x1,x2=x2,y=y,k=10)
+
+# ROC plot for logit model 
+roc(p=phat_logit, y=df_og$y, bty="n")
+```
+
+![](HW4-Marrero_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+
+``` r
+# ROC plot for KNN (K=10) model 
+roc(p=phat_k10, y=df_og$y, bty="n")
+```
+
+![](HW4-Marrero_files/figure-gfm/unnamed-chunk-12-2.png)<!-- -->
 
 ### Commentary on Model Selection
 
-Which of these models looks better?
+The KNN model looks better than the logit probability model because
+there is more area under in-sample ROC curve, indicating that for a
+given probability threshold, the KNN model is better at correctly
+classifying y. It also appears that the KNN model improves a lot with a
+relatively small increase to the probability threshold, with 0.2 as a
+max.
