@@ -1,0 +1,130 @@
+---
+title: "Homework 4"
+author: "Group 8"
+date: "4/28/2021"
+output:  
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+    highlight: haddock
+
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tidymodels)
+```
+
+# Data
+
+First, we will load and tidy the data. This involves converting all variables with Y/N responses to binary dummy variables. Additionally, we will create a _dummy variable indicating if the number of bedrooms and bathrooms for a house are both at least two_, denoted as `twotwo`.  
+
+```{r}
+# load homes data from HW 3 
+homes <- read_csv("https://codowd.com/bigdata/hw/hw2/homes2004.csv")
+
+# tidy data
+temp_fn <- function(x) is.character(x) & all(levels(as.factor(x)) %in% c("Y","N"))
+temp_fn2 <- function(x) x == "Y"
+na_relevel <- function(x) factor(x,levels=c(NA,levels(x)),exclude=NULL)
+
+homes <- homes %>% 
+  mutate(
+    # For two-level variables, convert to logical
+    across(where(temp_fn),temp_fn2),
+    # Convert other character vars to factors
+    across(where(is.character),as.factor),
+    # Re-level for LASSO 
+    across(where(is.factor),na_relevel),
+    # Add dummy predictor for classification model
+    twotwo = BATHS>=2 & BEDRMS >=2
+  )
+```
+
+# Questions
+
+
+## Q1 - Tree
+
+Using the `rpart` package (and same-named function), build a tree to predict two-two using all the data in `homes`. Add the argument `cp=0`, and make another tree. Plot that tree (`plot(mod)` will do the trick).
+
+```{r}
+
+```
+
+In two sentences or less, describe why this tree is shaped the way it is. (hint: think about what we are predicting)
+
+## Q2 - Bagging
+
+Steps:
+
+1. Set aside a 20% holdout sample. 
+```{r}
+set.seed(14432)
+ind = sample(nrow(homes),0.2*nrow(homes))
+holdout = homes[ind,]
+train = homes[-ind,]
+```
+
+2. Follow the code in [Lecture 10](https://codowd.com/bigdata/lectures/l10/l10.Rmd) to create 20 resampled datasets and build trees predicting `log(LPRICE)` with them. (hint: you will need to change the formula used by `rpart` inside my `resampled_mod` function, as well as the data used by the functions - use the training data). 
+
+```{r}
+
+```
+
+3. Make predictions on the holdout sample for each of the 20 tree models. (`pred_helper = function(x,xdata=holdout) predict(x,newdata=xdata)` may help)
+
+```{r}
+
+```
+
+4. Average those predictions to make a 'bagged model' prediction (`rowMeans` may help you here)
+```{r}
+
+```
+
+5. Find the errors for each prediction. `truth = matrix(rep(log(holdout$LPRICE),20),ncol=20,byrow=F)` may help with the tree models. 
+```{r}
+
+```
+
+5. Find the MSE for each of the tree models as well as the bagged model. 
+```{r}
+
+```
+
+What fraction of the tree models does the bagged model outperform? Give a two-sentence explanation of that performance. Give a one sentence explanation of what the line of code I gave in #5 did. 
+
+## Q3 - Forest
+
+Using the same training data as above:
+1. Make a 20-tree forest predicting `log(LPRICE)`. (hint: the function `ranger` and the argument `num.trees` are your friends.) 
+
+```{r}
+
+```
+
+2. Now make a 100-tree forest with that training data.
+
+```{r}
+
+```
+
+3. Make predictions for both forests on the holdout sample.
+`predict(mod,data=holdout)$predictions` may help.
+
+```{r}
+
+```
+
+4. Find the out-of-sample MSE for each each forest.
+
+```{r}
+
+```
+
+How did the forest compare to the bagged model? In 3 sentences or less, try to explain why.
+
+
+
