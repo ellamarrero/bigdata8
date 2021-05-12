@@ -76,31 +76,61 @@ train = homes[-ind,]
 2. Follow the code in [Lecture 10](https://codowd.com/bigdata/lectures/l10/l10.Rmd) to create 20 resampled datasets and build trees predicting `log(LPRICE)` with them. (hint: you will need to change the formula used by `rpart` inside my `resampled_mod` function, as well as the data used by the functions - use the training data). 
 
 ```{r}
-
+resampled_mod = function(x) {
+  ind = sample(nrow(homes),replace=T)
+  rpart(log(LPRICE)~ ., data=homes[-ind,], cp=0)
+}
+mymods <- c()
+mods = list()
+for (i in 1:20){
+  newmod <- resampled_mod(1)
+  assign(paste('mod', i, sep = ''), newmod)
+  mods = c(mods, list(newmod))
+  names(mods)[i] = paste('mod', i, sep = '')
+}
 ```
 
 3. Make predictions on the holdout sample for each of the 20 tree models. (`pred_helper = function(x,xdata=holdout) predict(x,newdata=xdata)` may help)
 
-```{r}
-
+```{r, message = FALSE}
+pred_helper = function(x,xdata=holdout) predict(x,newdata=xdata)
+preds <- list()
+for (i in 1:20){
+  preds = bind_cols(preds, pred_helper(mods[[i]]))
+}
 ```
 
 4. Average those predictions to make a 'bagged model' prediction (`rowMeans` may help you here)
 ```{r}
-
+avg_preds <- rowMeans(preds)
 ```
 
 5. Find the errors for each prediction. `truth = matrix(rep(log(holdout$LPRICE),20),ncol=20,byrow=F)` may help with the tree models. 
 ```{r}
-
+truth = matrix(rep(log(holdout$LPRICE),20),ncol=20,byrow=F)
+errors <- preds - truth
 ```
 
 5. Find the MSE for each of the tree models as well as the bagged model. 
 ```{r}
+MSE <- apply(errors, 2, function(x) mean(x^2))
+MSE
 
+bagged_errors <- avg_preds - log(holdout$LPRICE)
+bagged_mse <- mean(bagged_errors^2)
+bagged_mse
 ```
 
 What fraction of the tree models does the bagged model outperform? Give a two-sentence explanation of that performance. Give a one sentence explanation of what the line of code I gave in #5 did. 
+
+```{r}
+length(MSE[MSE>bagged_mse])/length(MSE)
+```
+
+The bagged model outperforms 100% of the tree models. Bagged models really are pretty great when you think about it ;)
+
+The line of code in #5 creates a matrix where each row is 20 columns of the same value - 1 to measure error for every single model with and create a matrix of errors. 
+
 
 ## Q3 - Forest
 
@@ -108,29 +138,37 @@ Using the same training data as above:
 1. Make a 20-tree forest predicting `log(LPRICE)`. (hint: the function `ranger` and the argument `num.trees` are your friends.) 
 
 ```{r}
-
+smol_forest <- ranger(log(LPRICE)~., data = train, num.trees = 20)
 ```
 
 2. Now make a 100-tree forest with that training data.
 
 ```{r}
-
+beeg_forest <- ranger(log(LPRICE)~., data = train, num.trees = 100)
 ```
 
 3. Make predictions for both forests on the holdout sample.
 `predict(mod,data=holdout)$predictions` may help.
 
 ```{r}
-
+beeg_pred <- predict(beeg_forest, holdout)$predictions
+smol_pred <- predict(smol_forest,holdout)$predictions
 ```
 
 4. Find the out-of-sample MSE for each each forest.
 
 ```{r}
+real <- log(holdout$LPRICE)
+beeg_mse <- mean((beeg_pred-real)^2)
+smol_mse <- mean((smol_pred-real)^2)
 
+cat(paste('Beeg: ', beeg_mse), "\n")
+
+cat(paste('Smol: ', smol_mse))
 ```
+
+
 
 How did the forest compare to the bagged model? In 3 sentences or less, try to explain why.
 
-
-
+Well... its no bag.
