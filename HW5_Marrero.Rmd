@@ -1,7 +1,7 @@
 ---
-title: "Homework 4"
+title: "Homework 5"
 author: "Group 8"
-date: "4/28/2021"
+date: "5/10/2021"
 output:  
   html_document:
     toc: true
@@ -14,6 +14,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(tidymodels)
+library(rpart)
 ```
 
 # Data
@@ -47,13 +48,18 @@ homes <- homes %>%
 
 ## Q1 - Tree
 
-Using the `rpart` package (and same-named function), build a tree to predict two-two using all the data in `homes`. Add the argument `cp=0`, and make another tree. Plot that tree (`plot(mod)` will do the trick).
+First, we will build a tree to predict `twotwo` using all the data in `homes`, and plot the resultant tree. 
 
 ```{r}
-
+# build tree with all predictors (.)
+mod1 <- rpart(twotwo ~ ., data=homes)
+# add argument cp = 0
+mod2 <- rpart(twotwo ~ ., data=homes, cp=0)
+# plot tree
+plot(mod2)
 ```
 
-In two sentences or less, describe why this tree is shaped the way it is. (hint: think about what we are predicting)
+The tree is  shaped like this because `twotwo` is a binary variable indicating indicating if the number of bedrooms and bathrooms for a house are both at least two. Thus the first break likely corresponds to houses where either bedrooms or bathrooms are not both at least two, and the next node on the opposite leaf is determining if num. bedroom and bathroom both > 2. (???)
 
 ## Q2 - Bagging
 
