@@ -1,7 +1,7 @@
 ---
 title: "Homework 5"
 author: "Group 8"
-date: "5/10/2021"
+date: "5/12/2021"
 output:  
   html_document:
     toc: true
@@ -13,7 +13,7 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-library(tidymodels)
+library(ranger)
 library(rpart)
 ```
 
@@ -21,7 +21,7 @@ library(rpart)
 
 First, we will load and tidy the data. This involves converting all variables with Y/N responses to binary dummy variables. Additionally, we will create a _dummy variable indicating if the number of bedrooms and bathrooms for a house are both at least two_, denoted as `twotwo`.  
 
-```{r}
+```{r, message = FALSE}
 # load homes data from HW 3 
 homes <- read_csv("https://codowd.com/bigdata/hw/hw2/homes2004.csv")
 
@@ -63,108 +63,123 @@ The tree is shaped like this because `twotwo` is a binary variable indicating in
 
 ## Q2 - Bagging
 
-Steps:
+For bagging, we will:
 
-1. Set aside a 20% holdout sample. 
+1. First, set aside a 20% holdout sample. 
 ```{r}
 set.seed(14432)
+# generate random index (20% of n)
 ind = sample(nrow(homes),0.2*nrow(homes))
+# subset datasets into training and holdout (test)
 holdout = homes[ind,]
 train = homes[-ind,]
 ```
 
-2. Follow the code in [Lecture 10](https://codowd.com/bigdata/lectures/l10/l10.Rmd) to create 20 resampled datasets and build trees predicting `log(LPRICE)` with them. (hint: you will need to change the formula used by `rpart` inside my `resampled_mod` function, as well as the data used by the functions - use the training data). 
+2. Them we will create 20 resampled datasets and build trees predicting `log(LPRICE)` with them. 
 
 ```{r}
+# function for creating a model based on resampled data
 resampled_mod = function(x) {
   ind = sample(nrow(homes),replace=T)
   rpart(log(LPRICE)~ ., data=homes[-ind,], cp=0)
 }
-mymods <- c()
-mods = list()
+# generated a list of 20 tree models 
+mods = list() # initialize list
 for (i in 1:20){
-  newmod <- resampled_mod(1)
-  assign(paste('mod', i, sep = ''), newmod)
-  mods = c(mods, list(newmod))
-  names(mods)[i] = paste('mod', i, sep = '')
+  newmod <- resampled_mod(1) # generate model
+  assign(paste('mod', i, sep = ''), newmod) # col names
+  mods = c(mods, list(newmod)) # add to list
+  names(mods)[i] = paste('mod', i, sep = '') 
 }
 ```
 
-3. Make predictions on the holdout sample for each of the 20 tree models. (`pred_helper = function(x,xdata=holdout) predict(x,newdata=xdata)` may help)
+3. Then, we will make predictions on the holdout sample for each of the 20 tree models.
 
 ```{r, message = FALSE}
-pred_helper = function(x,xdata=holdout) predict(x,newdata=xdata)
+pred_helper <- function(x,xdata=holdout) predict(x,newdata=xdata)
+# create list of predictions for each model
 preds <- list()
 for (i in 1:20){
   preds = bind_cols(preds, pred_helper(mods[[i]]))
 }
 ```
 
-4. Average those predictions to make a 'bagged model' prediction (`rowMeans` may help you here)
+4. Then we average those predictions to make a 'bagged model' prediction.  
+
 ```{r}
+# take the average value of each row to create a single set of predictions
+# (ncol = 1)
 avg_preds <- rowMeans(preds)
 ```
 
-5. Find the errors for each prediction. `truth = matrix(rep(log(holdout$LPRICE),20),ncol=20,byrow=F)` may help with the tree models. 
+5. We will then find the errors for each prediction of the model (not the bagged-model prediction).
 ```{r}
+# generate matrix with 20 columns of repeated true values 
 truth = matrix(rep(log(holdout$LPRICE),20),ncol=20,byrow=F)
+# calculate error from 20 model predictions
 errors <- preds - truth
 ```
 
-5. Find the MSE for each of the tree models as well as the bagged model. 
+6. Finally, we will find the MSE for each of the tree models, as well as the bagged model. 
 ```{r}
+# MSE for each of the tree models
 MSE <- apply(errors, 2, function(x) mean(x^2))
 MSE
 
+# Calculate error for bagged model
 bagged_errors <- avg_preds - log(holdout$LPRICE)
+# MSE for the bagged model
 bagged_mse <- mean(bagged_errors^2)
 bagged_mse
 ```
-
-What fraction of the tree models does the bagged model outperform? Give a two-sentence explanation of that performance. Give a one sentence explanation of what the line of code I gave in #5 did. 
-
+  
 ```{r}
+# Calculate fraction of tree models that bag model out performs
+# = num tree mods with higher MSE than bagged / tot num tree mods
 length(MSE[MSE>bagged_mse])/length(MSE)
 ```
 
-The bagged model outperforms 100% of the tree models. Bagged models really are pretty great when you think about it ;)
-
+The bagged model outperforms 100% of the tree models. Bagged models really are pretty great when you think about it ;)  
+  
 The line of code in #5 creates a matrix where each row is 20 columns of the same value - 1 to measure error for every single model with and create a matrix of errors. 
 
 
 ## Q3 - Forest
 
-Using the same training data as above:
-1. Make a 20-tree forest predicting `log(LPRICE)`. (hint: the function `ranger` and the argument `num.trees` are your friends.) 
+Using the same training data as above, we will create and test forest models as following:   
 
+1. First, we will make a 20-tree forest predicting `log(LPRICE)` using `ranger`.  
+  
 ```{r}
 smol_forest <- ranger(log(LPRICE)~., data = train, num.trees = 20)
 ```
 
-2. Now make a 100-tree forest with that training data.
+2. Then, we will make a 100-tree forest with that training data.
 
 ```{r}
 beeg_forest <- ranger(log(LPRICE)~., data = train, num.trees = 100)
 ```
 
-3. Make predictions for both forests on the holdout sample.
-`predict(mod,data=holdout)$predictions` may help.
+3. Then, we will make predictions for both forests on the holdout sample.  
 
 ```{r}
 beeg_pred <- predict(beeg_forest, holdout)$predictions
 smol_pred <- predict(smol_forest,holdout)$predictions
 ```
 
-4. Find the out-of-sample MSE for each each forest.
+4. Finally, we will find the the *out-of-sample* MSE for each each forest.
 
 ```{r}
+# true values in holdout sample
 real <- log(holdout$LPRICE)
+# calculate means squared error from true in both models
 beeg_mse <- mean((beeg_pred-real)^2)
 smol_mse <- mean((smol_pred-real)^2)
 
-cat(paste('Beeg: ', beeg_mse), "\n")
+# print results
+cat(paste('100-Forest Model: ', beeg_mse), "\n")
 
-cat(paste('Smol: ', smol_mse))
+cat(paste('20-Forest Model:  ', smol_mse))
 ```
 
 
