@@ -59,7 +59,7 @@ mod2 <- rpart(twotwo ~ ., data=homes, cp=0)
 plot(mod2)
 ```
 
-The tree is  shaped like this because `twotwo` is a binary variable indicating indicating if the number of bedrooms and bathrooms for a house are both at least two. Thus the first break likely corresponds to houses where either bedrooms or bathrooms are not both at least two, and the next node on the opposite leaf is determining if num. bedroom and bathroom both > 2. (???)
+The tree is shaped like this because `twotwo` is a binary variable indicating indicating if the number of bedrooms and bathrooms for a house are both at least two. Thus, the two nodes we observe will correspond to the variables bedrooms and bathrooms and both be a split at the value of 2.
 
 ## Q2 - Bagging
 
