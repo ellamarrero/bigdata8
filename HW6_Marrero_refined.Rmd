@@ -1,0 +1,136 @@
+---
+title: "Homework 5"
+author: "Group 8"
+date: "5/12/2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+---
+
+```{r setup, include=TRUE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ranger)
+library(rpart)
+library(tidymodels)
+```
+
+# Data and Setup
+
+In this assignment, oriented towards cleaning data, we clean and analyze data on UK gas consumption and UK driver deaths.
+
+First, we will download the data:
+```{r, message=F}
+ukg <- read_csv("https://codowd.com/bigdata/hw/hw6/ukgas.csv")
+ukdd <- read_csv("https://codowd.com/bigdata/hw/hw6/ukdriverdeaths.csv")
+```
+
+# Clean Data
+  
+```{r}
+# convert ukdd from wide to long
+ukdd_long <- ukdd %>%
+  pivot_longer(
+    cols= -year,
+    names_to = "month",
+    values_to = "deaths")
+
+# convert ukg from wide to long
+ukg_long <- ukg %>%
+  pivot_longer(
+    cols= -year,
+    names_to = "quarter",
+    values_to = "gas") %>%
+  mutate(
+    # remove "Q" from quarter so numeric var
+    quarter = as.numeric(str_sub(quarter, 2))
+  )
+```
+
+```{r}
+# define months in each quarter
+q1_mos <- c("Jan", "Feb", "Mar")
+q2_mos <- c("Apr", "May", "Jun")
+q3_mos <- c("Jul", "Aug", "Sep")
+q4_mos <- c("Oct", "Nov", "Dec")
+
+ukdd_long <- ukdd_long %>%
+  mutate(
+    # create var indicating quarter of month
+    quarter = as.numeric(case_when(
+      month %in% q1_mos ~ 1, 
+      month %in% q2_mos ~ 2,
+      month %in% q3_mos ~ 3,
+      month %in% q4_mos ~ 4
+    ))
+    )
+```
+
+```{r, message = FALSE}
+# get total deaths in each year and quarter
+ukdd_sum <- ukdd_long %>%
+  group_by(year,quarter)%>%
+  summarize(tot_deaths = sum(deaths)) %>%
+  ungroup()
+```
+
+```{r}
+uk_merge <- # merge quarterly datasets on year and quarter
+  inner_join(ukdd_sum, ukg_long, 
+             by=c("year","quarter"))%>%
+  mutate(
+    # create numeric var w/ year and quarter info
+    time = year + (quarter-1)/4)
+```
+
+# Plot Results
+
+Now that our data is clean, we will plot the relationship between quarterly deaths and quarterly gas consumption over time (on the same plot), and regress one against the other.
+
+
+###  Plot quarterly UK deaths and UK gas consumption against time  
+
+```{r}
+uk_merge %>%
+  ggplot()+
+  geom_line(aes(x=time, y = tot_deaths, color = "Driver Deaths"))+
+  geom_line(aes(x=time, y = gas, color = "Gas"))+
+  labs(
+    title = "UK Driver Deaths and Gas Consumption vs. Time",
+    caption = "Source: codowd.com",
+    x = "Time (Quarterly)",
+    y =  "Count",
+    color = NULL
+  )
+```
+  
+### Scatterplot of deaths against gas consumption
+
+```{r, include = FALSE}
+cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+```
+
+```{r}
+uk_merge %>%
+  ggplot(aes(x=gas, y = tot_deaths, color = as.factor(quarter)))+
+  geom_point()+
+  labs(title = "UK Driver Deaths vs. Gas Consumption",
+    caption = "Source: codowd.com",
+    x = "Time (Quarterly)",
+    y =  "Count",
+    color = "Quarter")+
+  scale_color_manual(values = cbbPalette)
+```
+
+### Linear regression of deaths against gas consumption  
+
+```{r, message = FALSE, warning = FALSE}
+mod1 <- lm(tot_deaths ~ gas, data=uk_merge)
+
+summary(mod1)
+```
+*Summary of Relationship*
+  
+The association between total driver deaths and gas consumption in the UK is surprisingly negative--an increase in gas consumption leads to fewer total driver deaths overall. However, this effect is somewhat small ($\beta=-.8323$), and not incredible significant ($p=0.0551$).  
