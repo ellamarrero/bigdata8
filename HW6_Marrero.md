@@ -202,25 +202,31 @@ uk_merge %>%
 ``` r
 mod1 <- lm(tot_deaths ~ gas, data=uk_merge)
 
-stargazer::stargazer(mod1, type = "html")
+summary(mod1)
 ```
 
     ## 
-    ## <table style="text-align:center"><tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left"></td><td><em>Dependent variable:</em></td></tr>
-    ## <tr><td></td><td colspan="1" style="border-bottom: 1px solid black"></td></tr>
-    ## <tr><td style="text-align:left"></td><td>tot_deaths</td></tr>
-    ## <tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">gas</td><td>-0.832<sup>*</sup></td></tr>
-    ## <tr><td style="text-align:left"></td><td>(0.426)</td></tr>
-    ## <tr><td style="text-align:left"></td><td></td></tr>
-    ## <tr><td style="text-align:left">Constant</td><td>5,346.346<sup>***</sup></td></tr>
-    ## <tr><td style="text-align:left"></td><td>(196.803)</td></tr>
-    ## <tr><td style="text-align:left"></td><td></td></tr>
-    ## <tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">Observations</td><td>64</td></tr>
-    ## <tr><td style="text-align:left">R<sup>2</sup></td><td>0.058</td></tr>
-    ## <tr><td style="text-align:left">Adjusted R<sup>2</sup></td><td>0.043</td></tr>
-    ## <tr><td style="text-align:left">Residual Std. Error</td><td>771.161 (df = 62)</td></tr>
-    ## <tr><td style="text-align:left">F Statistic</td><td>3.822<sup>*</sup> (df = 1; 62)</td></tr>
-    ## <tr><td colspan="2" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left"><em>Note:</em></td><td style="text-align:right"><sup>*</sup>p<0.1; <sup>**</sup>p<0.05; <sup>***</sup>p<0.01</td></tr>
-    ## </table>
+    ## Call:
+    ## lm(formula = tot_deaths ~ gas, data = uk_merge)
+    ## 
+    ## Residuals:
+    ##     Min      1Q  Median      3Q     Max 
+    ## -1437.3  -548.7  -208.0   622.8  1960.5 
+    ## 
+    ## Coefficients:
+    ##              Estimate Std. Error t value Pr(>|t|)    
+    ## (Intercept) 5346.3457   196.8027  27.166   <2e-16 ***
+    ## gas           -0.8323     0.4257  -1.955   0.0551 .  
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+    ## 
+    ## Residual standard error: 771.2 on 62 degrees of freedom
+    ## Multiple R-squared:  0.05806,    Adjusted R-squared:  0.04287 
+    ## F-statistic: 3.822 on 1 and 62 DF,  p-value: 0.0551
 
 9.  In 2 sentences, describe any relationship.
+
+The association between total driver deaths and gas consumption in the
+UK is surprisingly negative–an increase in gas consumption leads to
+fewer total driver deaths overall. However, this effect is somewhat
+small (*β* =  − .8323), and not incredible significant (*p* = 0.0551).

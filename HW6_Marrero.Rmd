@@ -150,7 +150,7 @@ uk_merge %>%
 ```{r, message = FALSE, warning = FALSE}
 mod1 <- lm(tot_deaths ~ gas, data=uk_merge)
 
-stargazer::stargazer(mod1, type = "html")
+summary(mod1)
 ```
 
 9. In 2 sentences, describe any relationship. 
